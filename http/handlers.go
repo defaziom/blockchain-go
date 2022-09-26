@@ -1,8 +1,11 @@
-package server
+package http
 
 import (
 	"encoding/json"
+	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
+	"github.com/defaziom/blockchain-go/task"
+	"github.com/defaziom/blockchain-go/tcp"
 	"io"
 	"net/http"
 )
@@ -30,7 +33,7 @@ func BlocksHandler() http.Handler {
 	})
 }
 
-func MineBlockHandler() http.Handler {
+func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
@@ -49,11 +52,21 @@ func MineBlockHandler() http.Handler {
 		}
 
 		newBlock := blockchain.TheBlockChain.MineBlock(mineBlockRequest.Data)
-		_, err = blockchain.TheBlockChain.AddBlock(newBlock)
+		err = blockchain.TheBlockChain.AddBlock(newBlock)
 		if err != nil {
 			http.Error(w, "Error", http.StatusInternalServerError)
 		}
 		w.WriteHeader(http.StatusCreated)
+
+		peer := tcp.GetPeer()
+		t := task.SendNewBlock{
+			Msg: &tcp.PeerMsg{
+				Data: []*block.Block{newBlock},
+			},
+			Peer:    &peer,
+			Channel: pc,
+		}
+		go t.Execute()
 	})
 }
 

@@ -1,7 +1,12 @@
 package main
 
-import "github.com/defaziom/blockchain-go/server"
+import (
+	"github.com/defaziom/blockchain-go/http"
+	"github.com/defaziom/blockchain-go/tcp"
+)
 
 func main() {
-	server.Start()
+	tc := make(chan tcp.Peer)
+	http.Start(tc)
+	tcp.Start(tc)
 }

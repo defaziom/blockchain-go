@@ -3,6 +3,7 @@ package blockchain
 import (
 	"errors"
 	"github.com/defaziom/blockchain-go/block"
+	"log"
 	"math"
 	"strings"
 	"time"
@@ -57,6 +58,21 @@ func (list *DoublyLinkedBlockList) ToSlice() []*block.Block {
 	return slice
 }
 
+func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *DoublyLinkedBlockList {
+	newList := &DoublyLinkedBlockList{
+		Value: nil,
+	}
+	if len(blocks) == 0 {
+		return newList
+	} else {
+		newList.Value = blocks[0]
+	}
+	for _, b := range blocks[1:] {
+		newList = newList.Add(b)
+	}
+	return newList
+}
+
 type BlockChain struct {
 	Blocks *DoublyLinkedBlockList
 }
@@ -89,7 +105,7 @@ var TheBlockChain = &BlockChain{
 // MineBlock Mines a block and returns it
 func (bc *BlockChain) MineBlock(data string) *block.Block {
 
-	lastBlock := bc.Blocks.Value
+	lastBlock := bc.GetLatestBlock()
 	b := &block.Block{
 		Timestamp:     time.Now(),
 		Data:          data,
@@ -112,20 +128,20 @@ func (bc *BlockChain) MineBlock(data string) *block.Block {
 }
 
 // AddBlock Adds a block to the end of the blockchain. Check to see if the new block is valid.
-func (bc *BlockChain) AddBlock(block *block.Block) (*block.Block, error) {
+func (bc *BlockChain) AddBlock(block *block.Block) error {
 
-	lastBlock := bc.Blocks.Value
+	lastBlock := bc.GetLatestBlock()
 	valid, err := IsNewBlockValid(block, lastBlock)
 	if valid {
 		bc.Blocks = bc.Blocks.Add(block)
-		return bc.Blocks.Value, nil
+		return nil
 	} else {
-		return nil, err
+		return err
 	}
 }
 
 func (bc *BlockChain) GetDifficulty() int {
-	latestBlock := bc.Blocks.Value
+	latestBlock := bc.GetLatestBlock()
 
 	if latestBlock.Index%DifficultyAdjustmentIntervalBlocks == 0 && latestBlock.Index != 0 {
 		return bc.GetAdjustedDifficulty()
@@ -136,7 +152,7 @@ func (bc *BlockChain) GetDifficulty() int {
 }
 
 func (bc *BlockChain) GetAdjustedDifficulty() int {
-	latestBlock := bc.Blocks.Value
+	latestBlock := bc.GetLatestBlock()
 	prevAdjBlock := bc.Blocks.Last(DifficultyAdjustmentIntervalBlocks).Value
 	timeExpectedSec := BlockGenerationIntervalSec * DifficultyAdjustmentIntervalBlocks
 	timeTaken := latestBlock.Timestamp.Sub(prevAdjBlock.Timestamp).Seconds()
@@ -159,6 +175,19 @@ func (bc *BlockChain) GetCumulativeDifficulty() float64 {
 		difficultySum += math.Pow(2, float64(b.Difficulty))
 	}
 	return difficultySum
+}
+
+func (bc *BlockChain) GetLatestBlock() *block.Block {
+	return bc.Blocks.Value
+}
+
+func (bc *BlockChain) ReplaceChain(newChain *BlockChain) {
+	if IsValidBlockChain(newChain) && newChain.GetCumulativeDifficulty() > bc.GetCumulativeDifficulty() {
+		log.Println("Received blockchain is valid. Replacing current blockchain with received blockchain")
+		bc.Blocks = newChain.Blocks
+	} else {
+		log.Println("Received blockchain is invalid.")
+	}
 }
 
 // IsNewBlockValid Checks if a new block is valid to go on the end of the blockchain
