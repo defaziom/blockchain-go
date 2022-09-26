@@ -285,15 +285,12 @@ func TestIsValidGenesisBlock(t *testing.T) {
 		Timestamp:     time.Now(),
 		Data:          "new block",
 		PrevBlockHash: "",
-		BlockHash:     "",
+		BlockHash:     "abc",
 		Index:         1,
 		Nonce:         0,
 		Difficulty:    4,
 	}
 	assert.False(t, IsValidGenesisBlock(b))
-
-	copyGenesisBlock := *GetGenesisBlock()
-	assert.False(t, IsValidGenesisBlock(&copyGenesisBlock))
 }
 
 func TestIsValidBlockChain(t *testing.T) {

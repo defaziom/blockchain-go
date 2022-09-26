@@ -13,9 +13,10 @@ func StartTasks(pc chan tcp.Peer) {
 		msg, err := peer.ReceiveMsg()
 		if err != nil {
 			log.Println("Failed to receive msg from peer")
+			continue
 		}
 
-		ProcessMsg(msg, &peer, pc)
+		go ProcessMsg(msg, &peer, pc)
 	}
 }
 
@@ -31,7 +32,19 @@ func ProcessMsg(msg *tcp.PeerMsg, peer *tcp.Peer, c chan tcp.Peer) {
 		}
 		tsk = Task(t)
 	case tcp.QUERY_ALL:
+		t := &QueryAll{
+			Msg:     msg,
+			Peer:    peer,
+			Channel: c,
+		}
+		tsk = Task(t)
 	case tcp.QUERY_LATEST:
+		t := &QueryLatest{
+			Msg:     msg,
+			Peer:    peer,
+			Channel: c,
+		}
+		tsk = Task(t)
 	case tcp.RESPONSE_BLOCKCHAIN:
 		t := &ResponseBlockChain{
 			Msg:     msg,
@@ -39,6 +52,9 @@ func ProcessMsg(msg *tcp.PeerMsg, peer *tcp.Peer, c chan tcp.Peer) {
 			Channel: c,
 		}
 		tsk = Task(t)
+	default:
+		log.Println("Received unknown msg type")
+		return
 	}
 
 	tsk.Execute()
@@ -82,6 +98,26 @@ func (task *QueryLatest) Continue() {
 	task.Channel <- *task.Peer
 }
 
+type QueryAll PeerMsgTask
+
+func (task *QueryAll) Execute() {
+	// Send the entire blockchain
+	log.Println("Sending entire blockchain")
+	blocks := blockchain.GetBlockChain().Blocks.ToSlice()
+
+	err := (*task.Peer).SendResponseBlockChainMsg(blocks)
+	if err != nil {
+		log.Println("Failed to send response blockchain msg", err.Error())
+		(*task.Peer).ClosePeer()
+		return
+	}
+
+	task.Continue()
+}
+func (task *QueryAll) Continue() {
+	task.Channel <- *task.Peer
+}
+
 type ResponseBlockChain PeerMsgTask
 
 func (task *ResponseBlockChain) Execute() {
@@ -101,12 +137,14 @@ func (task *ResponseBlockChain) Execute() {
 
 		if latestBlockHeld.BlockHash == latestBlockReceived.PrevBlockHash {
 			// The block received is the next block in the chain
+			log.Println("Adding block to the blockchain")
 			err := blockchain.GetBlockChain().AddBlock(latestBlockReceived)
 			if err != nil {
 				log.Println("Received invalid block: " + err.Error())
 			}
 		} else if len(receivedBlocks) == 1 {
 			// We have to query the chain from our peer
+			log.Println("Querying peer for entire blockchain")
 			err := (*task.Peer).SendQueryAllMsg()
 			if err != nil {
 				log.Println("Failed to query peer for entire chain: " + err.Error())
@@ -117,6 +155,7 @@ func (task *ResponseBlockChain) Execute() {
 			return
 		} else {
 			// Received chain is longer than our own chain
+			log.Println("Replacing blockchain")
 			receivedChainList := blockchain.DoublyLinkedBlockListCreateFromSlice(receivedBlocks)
 			receivedBlockChain := &blockchain.BlockChain{Blocks: receivedChainList}
 			blockchain.GetBlockChain().ReplaceChain(receivedBlockChain)

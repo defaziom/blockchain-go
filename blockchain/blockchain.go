@@ -221,7 +221,7 @@ func IsNewBlockValid(newBlock *block.Block, prevBlock *block.Block) (bool, error
 }
 
 func IsValidGenesisBlock(block *block.Block) bool {
-	return block == GetGenesisBlock()
+	return block.BlockHash == GetGenesisBlock().BlockHash
 }
 
 func IsValidBlockChain(bc *BlockChain) bool {
