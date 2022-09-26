@@ -9,6 +9,16 @@ import (
 )
 import "github.com/stretchr/testify/assert"
 
+func CreateBlockChain() *BlockChain {
+	return &BlockChain{
+		Blocks: &DoublyLinkedBlockList{
+			Prev:  nil,
+			Next:  nil,
+			Value: GetGenesisBlock(),
+		},
+	}
+}
+
 func TestDoublyLinkedBlockList_Add(t *testing.T) {
 	b1 := &block.Block{
 		Timestamp:     time.Now(),
@@ -193,7 +203,7 @@ func TestDoublyLinkedBlockList_AddFromSlice(t *testing.T) {
 func TestBlockChain_MineBlock(t *testing.T) {
 	const expectedData = "asdf"
 
-	minedBlock := TheBlockChain.MineBlock(expectedData)
+	minedBlock := CreateBlockChain().MineBlock(expectedData)
 
 	assert.Equal(t, expectedData, minedBlock.Data, "Block should contain input data")
 	assert.NotEqualf(t, time.Time{}, minedBlock.Timestamp, "Timestamp should be initialized")
@@ -248,6 +258,7 @@ func TestBlockChain_IsNewBlockValid(t *testing.T) {
 }
 
 func TestBlockChain_AddBlock(t *testing.T) {
+	blockchain := CreateBlockChain()
 
 	newBlock := &block.Block{
 		Timestamp:     time.Now(),
@@ -260,11 +271,11 @@ func TestBlockChain_AddBlock(t *testing.T) {
 	}
 	newBlock.BlockHash = newBlock.CalculateBlockHash()
 
-	err := TheBlockChain.AddBlock(newBlock)
+	err := blockchain.AddBlock(newBlock)
 
 	assert.Nil(t, err)
-	assert.Equal(t, newBlock, TheBlockChain.GetLatestBlock(), "The new block should be the added block")
-	assert.Equal(t, newBlock, TheBlockChain.Blocks.Value, "The latest block should be the added block")
+	assert.Equal(t, newBlock, blockchain.GetLatestBlock(), "The new block should be the added block")
+	assert.Equal(t, newBlock, blockchain.Blocks.Value, "The latest block should be the added block")
 }
 
 func TestIsValidGenesisBlock(t *testing.T) {
@@ -286,74 +297,79 @@ func TestIsValidGenesisBlock(t *testing.T) {
 }
 
 func TestIsValidBlockChain(t *testing.T) {
-	_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock("one"))
-	_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock("two"))
-	_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock("three"))
+	blockchain := CreateBlockChain()
+	_ = blockchain.AddBlock(blockchain.MineBlock("one"))
+	_ = blockchain.AddBlock(blockchain.MineBlock("two"))
+	_ = blockchain.AddBlock(blockchain.MineBlock("three"))
 
-	assert.True(t, IsValidBlockChain(TheBlockChain))
+	assert.True(t, IsValidBlockChain(blockchain))
 
 	// Tamper with blockchain data
-	TheBlockChain.Blocks.Prev.Value.Data = "fake!"
-	assert.False(t, IsValidBlockChain(TheBlockChain))
+	blockchain.Blocks.Prev.Value.Data = "fake!"
+	assert.False(t, IsValidBlockChain(blockchain))
 }
 
 func TestBlockChain_GetDifficulty(t *testing.T) {
+	blockchain := CreateBlockChain()
 
-	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetDifficulty())
+	assert.Equal(t, GetGenesisBlock().Difficulty, blockchain.GetDifficulty())
 
 	// Add 3 blocks
 	for i := 0; i < 3; i++ {
-		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
+		_ = blockchain.AddBlock(blockchain.MineBlock(fmt.Sprint(i)))
 	}
 
-	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetDifficulty())
+	assert.Equal(t, GetGenesisBlock().Difficulty, blockchain.GetDifficulty())
 
 	// Add 2 more blocks
 	for i := 0; i < 2; i++ {
-		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
+		_ = blockchain.AddBlock(blockchain.MineBlock(fmt.Sprint(i)))
 	}
 
-	assert.Equal(t, GetGenesisBlock().Difficulty+1, TheBlockChain.GetDifficulty(),
+	assert.Equal(t, GetGenesisBlock().Difficulty+1, blockchain.GetDifficulty(),
 		"Difficulty should have increased by one")
 }
 
 func TestBlockChain_GetAdjustedDifficulty(t *testing.T) {
+	blockchain := CreateBlockChain()
 
 	// Add 10 blocks
 	for i := 0; i < 10; i++ {
-		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
+		_ = blockchain.AddBlock(blockchain.MineBlock(fmt.Sprint(i)))
 	}
-	assert.Equal(t, GetGenesisBlock().Difficulty+1, TheBlockChain.GetAdjustedDifficulty(),
+	assert.Equal(t, GetGenesisBlock().Difficulty+1, blockchain.GetAdjustedDifficulty(),
 		"Difficulty should have increased by one")
 
 	// Add 5 blocks with delay
 	for i := 0; i < 5; i++ {
-		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
+		_ = blockchain.AddBlock(blockchain.MineBlock(fmt.Sprint(i)))
 		time.Sleep(1500 * time.Millisecond)
 	}
-	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetAdjustedDifficulty(),
+	assert.Equal(t, GetGenesisBlock().Difficulty, blockchain.GetAdjustedDifficulty(),
 		"Difficulty should have decreased by one")
 
 	// Add 5 blocks with smaller delay
 	for i := 0; i < 5; i++ {
-		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
+		_ = blockchain.AddBlock(blockchain.MineBlock(fmt.Sprint(i)))
 		time.Sleep(1000 * time.Millisecond)
 	}
-	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetAdjustedDifficulty(),
+	assert.Equal(t, GetGenesisBlock().Difficulty, blockchain.GetAdjustedDifficulty(),
 		"Difficulty should have stayed the same")
 }
 
 func TestBlockChain_GetCumulativeDifficulty(t *testing.T) {
+	blockchain := CreateBlockChain()
+
 	b1 := &block.Block{Difficulty: 1}
 	b2 := &block.Block{Difficulty: 2}
 	b3 := &block.Block{Difficulty: 3}
 
-	TheBlockChain.Blocks = TheBlockChain.Blocks.Add(b1)
-	TheBlockChain.Blocks = TheBlockChain.Blocks.Add(b2)
-	TheBlockChain.Blocks = TheBlockChain.Blocks.Add(b3)
+	blockchain.Blocks = blockchain.Blocks.Add(b1)
+	blockchain.Blocks = blockchain.Blocks.Add(b2)
+	blockchain.Blocks = blockchain.Blocks.Add(b3)
 
 	expectedCumulativeDifficulty := math.Pow(2, float64(GetGenesisBlock().Difficulty)) + math.Pow(2, 1) + math.Pow(2,
 		2) + math.Pow(2, 3)
 
-	assert.Equal(t, expectedCumulativeDifficulty, TheBlockChain.GetCumulativeDifficulty())
+	assert.Equal(t, expectedCumulativeDifficulty, blockchain.GetCumulativeDifficulty())
 }
