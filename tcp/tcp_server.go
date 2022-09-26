@@ -12,7 +12,7 @@ func StartServer(port int, pc chan Peer) {
 		log.Println("Error listening:", err.Error())
 	}
 	defer ln.Close()
-	log.Println(fmt.Sprintf("TCP http Listening on :%d", port))
+	log.Println(fmt.Sprintf("Starting TCP server on :%d", port))
 	for {
 		// Listen for an incoming connection.
 		conn, err := ln.Accept()

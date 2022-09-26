@@ -11,6 +11,6 @@ func StartServer(port int, pc chan tcp.Peer) {
 	http.Handle("/blocks", JsonResponse(BlocksHandler()))
 	http.Handle("/blocks/mine", JsonResponse(MineBlockHandler(pc)))
 	http.Handle("/peers", JsonResponse(PeersHandler()))
-	log.Println(fmt.Sprintf("Starting HTTP http on %d", port))
+	log.Println(fmt.Sprintf("Starting HTTP server on %d", port))
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
