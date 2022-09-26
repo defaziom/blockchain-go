@@ -3,35 +3,39 @@ package tcp
 import (
 	"encoding/json"
 	"github.com/defaziom/blockchain-go/block"
-	"log"
 	"net"
 )
 
 type PeerMsgType int
 
 const (
-	ACK PeerMsgType = iota
-	QUERY_LATEST
-	QUERY_ALL
-	RESPONSE_BLOCKCHAIN
+	ACK                 PeerMsgType = iota // Signals end of communication with a Peer
+	QUERY_LATEST                           // Asks for the latest block held by a Peer
+	QUERY_ALL                              // Ask for the entire blockchain held by a Peer
+	RESPONSE_BLOCKCHAIN                    // Contains a single block, or an entire blockchain
 )
 
+// PeerMsg is a message from a blockchain peer
 type PeerMsg struct {
 	Type PeerMsgType
 	Data []*block.Block
 }
 
+// Peer represents a blockchain peer with methods to interact with
 type Peer interface {
-	ClosePeer()
+	ClosePeer() error
+	IsClosed() bool
 	ReceiveMsg() (*PeerMsg, error)
 	SendResponseBlockChainMsg(blocks []*block.Block) error
 	SendQueryAllMsg() error
 	SendAckMsg() error
 }
 
+// PeerConn is a Peer with an underlying TCP connection
 type PeerConn struct {
 	net.Conn
 	Peer
+	Closed bool
 }
 
 const readBufferSizeBytes = 1024
@@ -60,16 +64,31 @@ func ReadData(conn net.Conn) ([]byte, error) {
 	return data, nil
 }
 
-func (connMsg *PeerConn) ClosePeer() {
-	_ = connMsg.Close()
+// ClosePeer closes the underlying net.Conn
+func (pc *PeerConn) ClosePeer() error {
+	err := pc.Conn.Close()
+	pc.Closed = true
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsClosed returns if the Peer connection has been closed
+func (pc *PeerConn) IsClosed() bool {
+	return pc.Closed
 }
 
 // ReceiveMsg reads data from the TCP connection and unmarshals it into a PeerMsg
-func (connMsg *PeerConn) ReceiveMsg() (*PeerMsg, error) {
-	data, err := ReadData(connMsg)
+func (pc *PeerConn) ReceiveMsg() (*PeerMsg, error) {
+	data, err := ReadData(pc)
 
 	if err != nil {
-		return nil, err
+		if err.Error() == "EOF" {
+			return nil, nil
+		} else {
+			return nil, err
+		}
 	}
 
 	msg := &PeerMsg{}
@@ -81,12 +100,13 @@ func (connMsg *PeerConn) ReceiveMsg() (*PeerMsg, error) {
 	return msg, nil
 }
 
-func (connMsg *PeerConn) SendResp(msg *PeerMsg) error {
+// SendResp sends a PeerMsg to a Peer
+func (pc *PeerConn) SendResp(msg *PeerMsg) error {
 	dataToSend, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	_, err = connMsg.Write(append(dataToSend, byte('\n')))
+	_, err = pc.Write(append(dataToSend, byte('\n')))
 	if err != nil {
 		return err
 	}
@@ -94,29 +114,22 @@ func (connMsg *PeerConn) SendResp(msg *PeerMsg) error {
 	return nil
 }
 
-func (connMsg *PeerConn) CloseConn() {
-	err := connMsg.Conn.Close()
-	if err != nil {
-		log.Fatalln("Failed to close connection", err)
-	}
-}
-
-func (connMsg *PeerConn) SendResponseBlockChainMsg(blocks []*block.Block) error {
-	return connMsg.SendResp(&PeerMsg{
+func (pc *PeerConn) SendResponseBlockChainMsg(blocks []*block.Block) error {
+	return pc.SendResp(&PeerMsg{
 		Type: RESPONSE_BLOCKCHAIN,
 		Data: blocks,
 	})
 }
 
-func (connMsg *PeerConn) SendQueryAllMsg() error {
-	return connMsg.SendResp(&PeerMsg{
+func (pc *PeerConn) SendQueryAllMsg() error {
+	return pc.SendResp(&PeerMsg{
 		Type: QUERY_ALL,
 		Data: []*block.Block{},
 	})
 }
 
-func (connMsg *PeerConn) SendAckMsg() error {
-	return connMsg.SendResp(&PeerMsg{
+func (pc *PeerConn) SendAckMsg() error {
+	return pc.SendResp(&PeerMsg{
 		Type: ACK,
 		Data: []*block.Block{},
 	})

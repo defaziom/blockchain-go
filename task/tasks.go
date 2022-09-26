@@ -1,6 +1,7 @@
 package task
 
 import (
+	"errors"
 	"fmt"
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
@@ -10,97 +11,156 @@ import (
 
 func StartTasks(pc chan tcp.Peer) {
 	for peer := range pc {
-		msg, err := peer.ReceiveMsg()
-		if err != nil {
-			log.Println("Failed to receive msg from peer")
+		if peer.IsClosed() {
 			continue
 		}
-
-		go ProcessMsg(msg, &peer, pc)
+		jobExecutor := PeerJobExecutor{
+			PeerJob{Peer: &peer},
+		}
+		go func() {
+			err := jobExecutor.Start()
+			if err != nil {
+				log.Println(err.Error())
+			}
+		}()
 	}
 }
 
-func ProcessMsg(msg *tcp.PeerMsg, peer *tcp.Peer, c chan tcp.Peer) {
-	var tsk Task
+// JobExecutor starts a Job
+type JobExecutor interface {
+	Start() error
+}
+
+// Job represents a series of tasks to be performed
+type Job interface {
+	GetNextTask() (*Task, error)
+}
+
+// Task contains a business thread to be run.
+type Task interface {
+	// Execute performs the task
+	Execute() error
+}
+
+// PeerJobExecutor contains one Job to perform
+type PeerJobExecutor struct {
+	Job PeerJob
+}
+
+// PeerJob is a Job that interacts with a Peer
+type PeerJob struct {
+	Peer *tcp.Peer
+}
+
+// PeerMsgTask is a Task created from a message from a peer
+type PeerMsgTask struct {
+	Msg  *tcp.PeerMsg
+	Peer *tcp.Peer
+	Task
+}
+
+func (pje *PeerJobExecutor) Start() error {
+	var task Task
+	task, err := pje.Job.GetNextTask()
+	if err != nil {
+		return errors.New("Failed to get next task: " + err.Error())
+	}
+	for task != nil {
+		err := task.Execute()
+		if err != nil {
+			log.Println("Task Failed: ", err.Error())
+			log.Println("Closing peer")
+			err = (*pje.Job.Peer).ClosePeer()
+			if err != nil {
+				log.Println("Failed to close peer: ", err.Error())
+			}
+			return errors.New("job failed due to failed task: " + err.Error())
+		}
+		task, err = pje.Job.GetNextTask()
+		if err != nil {
+			return errors.New("Failed to get next task: " + err.Error())
+		}
+	}
+	log.Println("Job complete!")
+	return nil
+}
+
+func (pj *PeerJob) GetNextTask() (Task, error) {
+
+	// No more tasks if peer is closed
+	if (*pj.Peer).IsClosed() {
+		return nil, nil
+	}
+
+	// Get the next message from the peer
+	msg, err := (*pj.Peer).ReceiveMsg()
+	if err != nil {
+		log.Println("Failed to receive msg from peer")
+		return nil, err
+	}
+	if msg == nil {
+		return nil, nil
+	}
+
+	var t Task
 
 	switch msg.Type {
 	case tcp.ACK:
-		t := &Ack{
-			Msg:     msg,
-			Peer:    peer,
-			Channel: c,
+		t = &Ack{
+			Msg:  msg,
+			Peer: pj.Peer,
 		}
-		tsk = Task(t)
 	case tcp.QUERY_ALL:
-		t := &QueryAll{
-			Msg:     msg,
-			Peer:    peer,
-			Channel: c,
+		t = &QueryAll{
+			Msg:  msg,
+			Peer: pj.Peer,
 		}
-		tsk = Task(t)
 	case tcp.QUERY_LATEST:
-		t := &QueryLatest{
-			Msg:     msg,
-			Peer:    peer,
-			Channel: c,
+		t = &QueryLatest{
+			Msg:  msg,
+			Peer: pj.Peer,
 		}
-		tsk = Task(t)
 	case tcp.RESPONSE_BLOCKCHAIN:
-		t := &ResponseBlockChain{
-			Msg:     msg,
-			Peer:    peer,
-			Channel: c,
+		t = &ResponseBlockChain{
+			Msg:  msg,
+			Peer: pj.Peer,
 		}
-		tsk = Task(t)
 	default:
-		log.Println("Received unknown msg type")
-		return
+		return nil, errors.New("received unknown msg type")
 	}
 
-	tsk.Execute()
-}
-
-type Task interface {
-	Execute()
-	Continue()
-}
-
-type PeerMsgTask struct {
-	Msg     *tcp.PeerMsg
-	Peer    *tcp.Peer
-	Channel chan tcp.Peer
-	Task
+	return t, nil
 }
 
 type Ack PeerMsgTask
 
-func (task *Ack) Execute() {
+func (task *Ack) Execute() error {
 	log.Println("Received ACK!")
-	(*task.Peer).ClosePeer()
+	err := (*task.Peer).ClosePeer()
+	if err != nil {
+		log.Println("Failed to close peer: ", err.Error())
+	}
+
+	return nil
 }
 
 type QueryLatest PeerMsgTask
 
-func (task *QueryLatest) Execute() {
+func (task *QueryLatest) Execute() error {
 	// Send the latest block in the blockchain
 	latestBlock := blockchain.GetBlockChain().GetLatestBlock()
 
 	err := (*task.Peer).SendResponseBlockChainMsg([]*block.Block{latestBlock})
 	if err != nil {
 		log.Println("Failed to send response blockchain msg", err.Error())
-		(*task.Peer).ClosePeer()
-		return
+		return err
 	}
-
-	task.Continue()
-}
-func (task *QueryLatest) Continue() {
-	task.Channel <- *task.Peer
+	return nil
 }
 
 type QueryAll PeerMsgTask
 
-func (task *QueryAll) Execute() {
+func (task *QueryAll) Execute() error {
 	// Send the entire blockchain
 	log.Println("Sending entire blockchain")
 	blocks := blockchain.GetBlockChain().Blocks.ToSlice()
@@ -108,25 +168,19 @@ func (task *QueryAll) Execute() {
 	err := (*task.Peer).SendResponseBlockChainMsg(blocks)
 	if err != nil {
 		log.Println("Failed to send response blockchain msg", err.Error())
-		(*task.Peer).ClosePeer()
-		return
+		return err
 	}
-
-	task.Continue()
-}
-func (task *QueryAll) Continue() {
-	task.Channel <- *task.Peer
+	return nil
 }
 
 type ResponseBlockChain PeerMsgTask
 
-func (task *ResponseBlockChain) Execute() {
+func (task *ResponseBlockChain) Execute() error {
 	receivedBlocks := task.Msg.Data
 	log.Println("Got blockchain: " + fmt.Sprint(receivedBlocks))
 
 	if len(receivedBlocks) == 0 {
 		log.Println("Got zero blocks")
-		return
 	}
 
 	latestBlockReceived := receivedBlocks[len(receivedBlocks)-1]
@@ -148,11 +202,9 @@ func (task *ResponseBlockChain) Execute() {
 			err := (*task.Peer).SendQueryAllMsg()
 			if err != nil {
 				log.Println("Failed to query peer for entire chain: " + err.Error())
-				(*task.Peer).ClosePeer()
-				return
+				return err
 			}
-			task.Continue()
-			return
+			return nil
 		} else {
 			// Received chain is longer than our own chain
 			log.Println("Replacing blockchain")
@@ -168,25 +220,7 @@ func (task *ResponseBlockChain) Execute() {
 	err := (*task.Peer).SendAckMsg()
 	if err != nil {
 		log.Println("Failed to send ack msg", err.Error())
-		(*task.Peer).ClosePeer()
+		return err
 	}
-
-}
-func (task *ResponseBlockChain) Continue() {
-	task.Channel <- *task.Peer
-}
-
-type SendNewBlock PeerMsgTask
-
-func (task *SendNewBlock) Execute() {
-	log.Println("Sending new block to peer")
-	err := (*task.Peer).SendResponseBlockChainMsg(task.Msg.Data)
-	if err != nil {
-		log.Println("Failed to send new block to peer")
-		(*task.Peer).ClosePeer()
-	}
-	task.Continue()
-}
-func (task *SendNewBlock) Continue() {
-	task.Channel <- *task.Peer
+	return nil
 }

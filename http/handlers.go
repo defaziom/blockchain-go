@@ -5,7 +5,6 @@ import (
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/database"
-	"github.com/defaziom/blockchain-go/task"
 	"github.com/defaziom/blockchain-go/tcp"
 	"io"
 	"log"
@@ -72,15 +71,15 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 			log.Println("Failed to get peers: " + err.Error())
 			return
 		}
+		log.Println("Sending block to peers")
 		for _, peer := range peers {
-			t := task.SendNewBlock{
-				Msg: &tcp.PeerMsg{
-					Data: []*block.Block{newBlock},
-				},
-				Peer:    &peer,
-				Channel: pc,
+			err = peer.SendResponseBlockChainMsg([]*block.Block{newBlock})
+			if err != nil {
+				log.Println("Failed to send block to peer: " + err.Error())
+			} else {
+				// Place the peer in the channel to continue processing
+				pc <- peer
 			}
-			go t.Execute()
 		}
 	})
 }
