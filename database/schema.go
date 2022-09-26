@@ -1,22 +1,17 @@
-package db
+package database
 
 import "github.com/hashicorp/go-memdb"
 
 func GetSchema() *memdb.DBSchema {
 	schema := &memdb.DBSchema{
 		Tables: map[string]*memdb.TableSchema{
-			"peer": &memdb.TableSchema{
-				Name: "peer",
+			"peer_conn_info": &memdb.TableSchema{
+				Name: "peer_conn_info",
 				Indexes: map[string]*memdb.IndexSchema{
-					"ip": &memdb.IndexSchema{
-						Name:    "ip",
+					"id": &memdb.IndexSchema{
+						Name:    "id",
 						Unique:  true,
 						Indexer: &memdb.StringFieldIndex{Field: "Ip"},
-					},
-					"port": &memdb.IndexSchema{
-						Name:    "port",
-						Unique:  false,
-						Indexer: &memdb.IntFieldIndex{Field: "Port"},
 					},
 				},
 			},

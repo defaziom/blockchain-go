@@ -1,17 +1,29 @@
 package tcp
 
 import (
+	"fmt"
+	"github.com/defaziom/blockchain-go/database"
 	"log"
 	"net"
 )
 
-func GetPeer() Peer {
-	conn, err := net.Dial("tcp", ":9999")
+func GetPeers() ([]Peer, error) {
+	infoList, err := database.GetAllPeerConnInfo()
 	if err != nil {
-		log.Println("Could not connect to peer", err.Error())
+		return nil, err
 	}
-	peerConn := &PeerConn{
-		Conn: conn,
+
+	var peers []Peer
+	for _, info := range infoList {
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", info.Ip, info.Port))
+		if err == nil {
+			log.Println("Could not connect to peer", err.Error())
+		}
+		peerConn := &PeerConn{
+			Conn: conn,
+		}
+		peer := Peer(peerConn)
+		peers = append(peers, peer)
 	}
-	return peerConn
+	return peers, nil
 }

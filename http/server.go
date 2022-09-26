@@ -1,14 +1,16 @@
 package http
 
 import (
+	"fmt"
 	"github.com/defaziom/blockchain-go/tcp"
 	"log"
 	"net/http"
 )
 
-func Start(pc chan tcp.Peer) {
+func StartServer(port int, pc chan tcp.Peer) {
 	http.Handle("/blocks", JsonResponse(BlocksHandler()))
 	http.Handle("/blocks/mine", JsonResponse(MineBlockHandler(pc)))
-	log.Println("Starting HTTP http on 8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	http.Handle("/peers", JsonResponse(PeersHandler()))
+	log.Println(fmt.Sprintf("Starting HTTP http on %d", port))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }

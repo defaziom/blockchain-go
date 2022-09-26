@@ -6,13 +6,13 @@ import (
 	"net"
 )
 
-func Start(pc chan Peer) {
-	ln, err := net.Listen("tcp", ":4343")
+func StartServer(port int, pc chan Peer) {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Println("Error listening:", err.Error())
 	}
 	defer ln.Close()
-	log.Println("TCP http Listening on :4343")
+	log.Println(fmt.Sprintf("TCP http Listening on :%d", port))
 	for {
 		// Listen for an incoming connection.
 		conn, err := ln.Accept()
