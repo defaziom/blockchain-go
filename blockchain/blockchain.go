@@ -6,18 +6,22 @@ import (
 	"log"
 	"math"
 	"strings"
+	"sync"
 	"time"
 )
 
-type DoublyLinkedBlockList struct {
-	Prev  *DoublyLinkedBlockList
-	Next  *DoublyLinkedBlockList
+type SafeDoublyLinkedBlockList struct {
+	Prev  *SafeDoublyLinkedBlockList
+	Next  *SafeDoublyLinkedBlockList
 	Value *block.Block
+	mu    sync.Mutex
 }
 
 // Add Adds a block to the end of the list and returns the latest element
-func (list *DoublyLinkedBlockList) Add(block *block.Block) *DoublyLinkedBlockList {
-	list.Next = &DoublyLinkedBlockList{
+func (list *SafeDoublyLinkedBlockList) Add(block *block.Block) *SafeDoublyLinkedBlockList {
+	list.mu.Lock()
+	defer list.mu.Unlock()
+	list.Next = &SafeDoublyLinkedBlockList{
 		Prev:  list,
 		Next:  nil,
 		Value: block,
@@ -26,7 +30,9 @@ func (list *DoublyLinkedBlockList) Add(block *block.Block) *DoublyLinkedBlockLis
 }
 
 // First Returns the first element in the list
-func (list *DoublyLinkedBlockList) First() *DoublyLinkedBlockList {
+func (list *SafeDoublyLinkedBlockList) First() *SafeDoublyLinkedBlockList {
+	list.mu.Lock()
+	defer list.mu.Unlock()
 	if list.Prev == nil {
 		return list
 	}
@@ -38,7 +44,9 @@ func (list *DoublyLinkedBlockList) First() *DoublyLinkedBlockList {
 }
 
 // Last Returns the element `index` from the end
-func (list *DoublyLinkedBlockList) Last(index int) *DoublyLinkedBlockList {
+func (list *SafeDoublyLinkedBlockList) Last(index int) *SafeDoublyLinkedBlockList {
+	list.mu.Lock()
+	defer list.mu.Unlock()
 	iter := list
 	for i := 0; iter.Prev != nil && i < index; i++ {
 		iter = iter.Prev
@@ -47,9 +55,11 @@ func (list *DoublyLinkedBlockList) Last(index int) *DoublyLinkedBlockList {
 }
 
 // ToSlice Converts the list to a slice of blocks by appending all the blocks to a slice.
-func (list *DoublyLinkedBlockList) ToSlice() []*block.Block {
+func (list *SafeDoublyLinkedBlockList) ToSlice() []*block.Block {
 	slice := make([]*block.Block, 1)
 	node := list.First()
+	list.mu.Lock()
+	defer list.mu.Unlock()
 	slice[0] = node.Value
 	for node.Next != nil {
 		node = node.Next
@@ -58,8 +68,8 @@ func (list *DoublyLinkedBlockList) ToSlice() []*block.Block {
 	return slice
 }
 
-func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *DoublyLinkedBlockList {
-	newList := &DoublyLinkedBlockList{
+func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *SafeDoublyLinkedBlockList {
+	newList := &SafeDoublyLinkedBlockList{
 		Value: nil,
 	}
 	if len(blocks) == 0 {
@@ -74,7 +84,7 @@ func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *DoublyLinkedBl
 }
 
 type BlockChain struct {
-	Blocks *DoublyLinkedBlockList
+	Blocks *SafeDoublyLinkedBlockList
 }
 
 var genesisBlock = &block.Block{
@@ -99,7 +109,7 @@ var blockChain *BlockChain
 func GetBlockChain() *BlockChain {
 	if blockChain == nil {
 		blockChain = &BlockChain{
-			Blocks: &DoublyLinkedBlockList{
+			Blocks: &SafeDoublyLinkedBlockList{
 				Prev:  nil,
 				Next:  nil,
 				Value: GetGenesisBlock(),

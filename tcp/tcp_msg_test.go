@@ -52,21 +52,16 @@ func TestReadData(t *testing.T) {
 
 	mockConn := &MockConn{bytes.NewBufferString(expectedData)}
 
-	msg := Peer{
-		Msg:  nil,
-		Conn: mockConn,
-	}
-
-	actualData, _ := ReadData(msg)
+	actualData, _ := ReadData(mockConn)
 	assert.Equal(t, expectedData, string(actualData))
 
 	expectedLongData := strings.Repeat("A", 2048) + "\n"
 	mockConn.DataToBeRead = bytes.NewBufferString(expectedLongData)
-	actualLongData, _ := ReadData(msg)
+	actualLongData, _ := ReadData(mockConn)
 	assert.Equal(t, expectedLongData, string(actualLongData))
 }
 
-func TestConnMsg_LoadMsg(t *testing.T) {
+func TestPeerConn_ReceiveMsg(t *testing.T) {
 	testMsg := &PeerMsg{
 		Type: QUERY_LATEST,
 		Data: []*block.Block{},
@@ -74,16 +69,15 @@ func TestConnMsg_LoadMsg(t *testing.T) {
 	testData, _ := json.Marshal(testMsg)
 	mockConn := &MockConn{bytes.NewBuffer(append(testData, byte('\n')))}
 
-	testConnMsg := Peer{
-		Msg:  &PeerMsg{},
+	testPeerConn := PeerConn{
 		Conn: mockConn,
 	}
 
-	err := testConnMsg.LoadMsg()
+	actualMsg, err := testPeerConn.ReceiveMsg()
 	if err != nil {
 		t.Logf(err.Error())
 		t.Fail()
 	}
 
-	assert.Equal(t, *testMsg, *testConnMsg.Msg)
+	assert.Equal(t, *testMsg, *actualMsg)
 }

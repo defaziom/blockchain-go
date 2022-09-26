@@ -11,7 +11,7 @@ import "github.com/stretchr/testify/assert"
 
 func CreateBlockChain() *BlockChain {
 	return &BlockChain{
-		Blocks: &DoublyLinkedBlockList{
+		Blocks: &SafeDoublyLinkedBlockList{
 			Prev:  nil,
 			Next:  nil,
 			Value: GetGenesisBlock(),
@@ -39,7 +39,7 @@ func TestDoublyLinkedBlockList_Add(t *testing.T) {
 		Difficulty:    0,
 	}
 
-	first := &DoublyLinkedBlockList{
+	first := &SafeDoublyLinkedBlockList{
 		Prev:  nil,
 		Next:  nil,
 		Value: b1,
@@ -73,7 +73,7 @@ func TestDoublyLinkedBlockList_First(t *testing.T) {
 		Difficulty:    0,
 	}
 
-	expectedFirst := &DoublyLinkedBlockList{
+	expectedFirst := &SafeDoublyLinkedBlockList{
 		Prev:  nil,
 		Next:  nil,
 		Value: b1,
@@ -112,7 +112,7 @@ func TestDoublyLinkedBlockList_Last(t *testing.T) {
 		Nonce:         0,
 		Difficulty:    0,
 	}
-	testList := &DoublyLinkedBlockList{
+	testList := &SafeDoublyLinkedBlockList{
 		Prev:  nil,
 		Next:  nil,
 		Value: b1,
@@ -150,7 +150,7 @@ func TestDoublyLinkedBlockList_ToSlice(t *testing.T) {
 		Difficulty:    0,
 	}
 
-	first := &DoublyLinkedBlockList{
+	first := &SafeDoublyLinkedBlockList{
 		Prev:  nil,
 		Next:  nil,
 		Value: b1,
