@@ -34,6 +34,5 @@ func (b *Block) CalculateBlockHash() string {
 }
 
 func (b *Block) String() string {
-	return fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v", b.Timestamp, b.Data, b.PrevBlockHash, b.BlockHash, b.Index,
-		b.Difficulty)
+	return fmt.Sprintf("Time: %d\t Index: %d Data: %s", b.Timestamp.Unix(), b.Index, b.Data)
 }

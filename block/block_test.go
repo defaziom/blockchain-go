@@ -49,7 +49,7 @@ func TestBlock_IsBlockHashValid(t *testing.T) {
 
 func TestBlock_String(t *testing.T) {
 
-	expectedString := "0001-01-01 00:00:00 +0000 UTC\tTest\tasdf\tasdf2\t42\t4"
+	expectedString := "Time: -62135596800\t Index: 42 Data: Test"
 	block := &Block{
 		Timestamp:     time.Time{},
 		Data:          "Test",

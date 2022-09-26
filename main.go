@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/defaziom/blockchain-go/database"
 	"github.com/defaziom/blockchain-go/http"
+	"github.com/defaziom/blockchain-go/task"
 	"github.com/defaziom/blockchain-go/tcp"
 	"log"
 	"os"
@@ -25,5 +26,6 @@ func main() {
 	pc := make(chan tcp.Peer)
 	_ = database.GetDatabase()
 	go tcp.StartServer(tcpPort, pc)
+	go task.StartTasks(pc)
 	http.StartServer(httpPort, pc)
 }

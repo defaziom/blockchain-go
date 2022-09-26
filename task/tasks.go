@@ -8,14 +8,14 @@ import (
 	"log"
 )
 
-func Start(c chan tcp.Peer) {
-	for peer := range c {
+func StartTasks(pc chan tcp.Peer) {
+	for peer := range pc {
 		msg, err := peer.ReceiveMsg()
 		if err != nil {
 			log.Println("Failed to receive msg from peer")
 		}
 
-		ProcessMsg(msg, &peer, c)
+		ProcessMsg(msg, &peer, pc)
 	}
 }
 
@@ -56,11 +56,6 @@ type PeerMsgTask struct {
 	Task
 }
 
-// Continue places the Peer back into the processing chanel for continued processing
-func (task *PeerMsgTask) Continue() {
-	task.Channel <- *task.Peer
-}
-
 type Ack PeerMsgTask
 
 func (task *Ack) Execute() {
@@ -82,6 +77,9 @@ func (task *QueryLatest) Execute() {
 	}
 
 	task.Continue()
+}
+func (task *QueryLatest) Continue() {
+	task.Channel <- *task.Peer
 }
 
 type ResponseBlockChain PeerMsgTask
@@ -105,13 +103,13 @@ func (task *ResponseBlockChain) Execute() {
 			// The block received is the next block in the chain
 			err := blockchain.TheBlockChain.AddBlock(latestBlockReceived)
 			if err != nil {
-				log.Println("Received invalid block")
+				log.Println("Received invalid block: " + err.Error())
 			}
 		} else if len(receivedBlocks) == 1 {
 			// We have to query the chain from our peer
 			err := (*task.Peer).SendQueryAllMsg()
 			if err != nil {
-				log.Println("Failed to query peer for entire chain")
+				log.Println("Failed to query peer for entire chain: " + err.Error())
 				(*task.Peer).ClosePeer()
 				return
 			}
@@ -135,14 +133,21 @@ func (task *ResponseBlockChain) Execute() {
 	}
 
 }
+func (task *ResponseBlockChain) Continue() {
+	task.Channel <- *task.Peer
+}
 
 type SendNewBlock PeerMsgTask
 
 func (task *SendNewBlock) Execute() {
+	log.Println("Sending new block to peer")
 	err := (*task.Peer).SendResponseBlockChainMsg(task.Msg.Data)
 	if err != nil {
 		log.Println("Failed to send new block to peer")
 		(*task.Peer).ClosePeer()
 	}
 	task.Continue()
+}
+func (task *SendNewBlock) Continue() {
+	task.Channel <- *task.Peer
 }

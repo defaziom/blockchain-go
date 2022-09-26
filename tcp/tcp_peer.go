@@ -16,8 +16,9 @@ func GetPeers() ([]Peer, error) {
 	var peers []Peer
 	for _, info := range infoList {
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", info.Ip, info.Port))
-		if err == nil {
+		if err != nil {
 			log.Println("Could not connect to peer", err.Error())
+			continue
 		}
 		peerConn := &PeerConn{
 			Conn: conn,

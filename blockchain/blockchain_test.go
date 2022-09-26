@@ -199,7 +199,7 @@ func TestBlockChain_MineBlock(t *testing.T) {
 	assert.NotEqualf(t, time.Time{}, minedBlock.Timestamp, "Timestamp should be initialized")
 	assert.Equal(t, GetGenesisBlock().BlockHash, minedBlock.PrevBlockHash,
 		"Prev block hash must equal genesis block hash")
-	assert.Equal(t, "0000", minedBlock.BlockHash[:minedBlock.Difficulty],
+	assert.Equal(t, "0", minedBlock.BlockHash[:minedBlock.Difficulty],
 		"Block hash must be prefixed by leading zeros equal to the difficulty")
 	assert.Equal(t, 1, minedBlock.Index, "Index must be 1")
 }
@@ -301,15 +301,15 @@ func TestBlockChain_GetDifficulty(t *testing.T) {
 
 	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetDifficulty())
 
-	// Add 5 blocks
-	for i := 0; i < 5; i++ {
+	// Add 3 blocks
+	for i := 0; i < 3; i++ {
 		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
 	}
 
 	assert.Equal(t, GetGenesisBlock().Difficulty, TheBlockChain.GetDifficulty())
 
-	// Add 5 more blocks
-	for i := 0; i < 5; i++ {
+	// Add 2 more blocks
+	for i := 0; i < 2; i++ {
 		_ = TheBlockChain.AddBlock(TheBlockChain.MineBlock(fmt.Sprint(i)))
 	}
 

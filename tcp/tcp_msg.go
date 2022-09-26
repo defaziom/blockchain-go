@@ -60,8 +60,12 @@ func ReadData(conn net.Conn) ([]byte, error) {
 	return data, nil
 }
 
-// LoadMsg reads data from the TCP connection and unmarshals it into a PeerMsg
-func (connMsg *PeerConn) LoadMsg() (*PeerMsg, error) {
+func (connMsg *PeerConn) ClosePeer() {
+	_ = connMsg.Close()
+}
+
+// ReceiveMsg reads data from the TCP connection and unmarshals it into a PeerMsg
+func (connMsg *PeerConn) ReceiveMsg() (*PeerMsg, error) {
 	data, err := ReadData(connMsg)
 
 	if err != nil {
