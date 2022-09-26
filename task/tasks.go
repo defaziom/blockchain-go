@@ -67,7 +67,7 @@ type QueryLatest PeerMsgTask
 
 func (task *QueryLatest) Execute() {
 	// Send the latest block in the blockchain
-	latestBlock := blockchain.TheBlockChain.GetLatestBlock()
+	latestBlock := blockchain.GetBlockChain().GetLatestBlock()
 
 	err := (*task.Peer).SendResponseBlockChainMsg([]*block.Block{latestBlock})
 	if err != nil {
@@ -94,14 +94,14 @@ func (task *ResponseBlockChain) Execute() {
 	}
 
 	latestBlockReceived := receivedBlocks[len(receivedBlocks)-1]
-	latestBlockHeld := blockchain.TheBlockChain.GetLatestBlock()
+	latestBlockHeld := blockchain.GetBlockChain().GetLatestBlock()
 	if latestBlockReceived.Index > latestBlockHeld.Index {
 		log.Println(fmt.Sprintf("Blockchain possible behind. We got: %d Peer got: %d", latestBlockHeld.Index,
 			latestBlockReceived.Index))
 
 		if latestBlockHeld.BlockHash == latestBlockReceived.PrevBlockHash {
 			// The block received is the next block in the chain
-			err := blockchain.TheBlockChain.AddBlock(latestBlockReceived)
+			err := blockchain.GetBlockChain().AddBlock(latestBlockReceived)
 			if err != nil {
 				log.Println("Received invalid block: " + err.Error())
 			}
@@ -119,7 +119,7 @@ func (task *ResponseBlockChain) Execute() {
 			// Received chain is longer than our own chain
 			receivedChainList := blockchain.DoublyLinkedBlockListCreateFromSlice(receivedBlocks)
 			receivedBlockChain := &blockchain.BlockChain{Blocks: receivedChainList}
-			blockchain.TheBlockChain.ReplaceChain(receivedBlockChain)
+			blockchain.GetBlockChain().ReplaceChain(receivedBlockChain)
 		}
 	} else {
 		log.Println("Received chain is not longer than our own chain. Do nothing.")

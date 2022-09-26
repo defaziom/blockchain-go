@@ -94,12 +94,19 @@ func GetGenesisBlock() *block.Block {
 	return genesisBlock
 }
 
-var TheBlockChain = &BlockChain{
-	Blocks: &DoublyLinkedBlockList{
-		Prev:  nil,
-		Next:  nil,
-		Value: GetGenesisBlock(),
-	},
+var blockChain *BlockChain
+
+func GetBlockChain() *BlockChain {
+	if blockChain == nil {
+		blockChain = &BlockChain{
+			Blocks: &DoublyLinkedBlockList{
+				Prev:  nil,
+				Next:  nil,
+				Value: GetGenesisBlock(),
+			},
+		}
+	}
+	return blockChain
 }
 
 // MineBlock Mines a block and returns it

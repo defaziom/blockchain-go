@@ -24,7 +24,7 @@ func BlocksHandler() http.Handler {
 			return
 		}
 		// Return list of all blocks stored on the chain
-		resp, err := json.Marshal(blockchain.TheBlockChain.Blocks.ToSlice())
+		resp, err := json.Marshal(blockchain.GetBlockChain().Blocks.ToSlice())
 		if err != nil {
 			http.Error(w, "Error", http.StatusInternalServerError)
 		}
@@ -57,8 +57,8 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 			return
 		}
 
-		newBlock := blockchain.TheBlockChain.MineBlock(mineBlockRequest.Data)
-		err = blockchain.TheBlockChain.AddBlock(newBlock)
+		newBlock := blockchain.GetBlockChain().MineBlock(mineBlockRequest.Data)
+		err = blockchain.GetBlockChain().AddBlock(newBlock)
 		if err != nil {
 			log.Println(err.Error())
 			http.Error(w, "Error", http.StatusInternalServerError)
