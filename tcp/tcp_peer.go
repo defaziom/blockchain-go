@@ -8,12 +8,27 @@ import (
 	"net"
 )
 
-// GetPeers takes a list of database.PeerConnInfo and establishes a connection with the peer,
-// returning a list of Peer to interact with
-func GetPeers(peerConnInfoList []*database.PeerConnInfo) ([]Peer, error) {
+type NetDialer interface {
+	Dial(address string) (net.Conn, error)
+}
+
+type TcpDialer struct {
+}
+
+func (tcpDialer *TcpDialer) Dial(address string) (net.Conn, error) {
+	return net.Dial("tcp", address)
+}
+
+func CreateTcpDialer() *TcpDialer {
+	return &TcpDialer{}
+}
+
+// GetPeers takes a list of database.PeerConnInfo and establishes a connection with the peer using the provided
+// NetDialer returning a list of Peer to interact with
+func GetPeers(peerConnInfoList []*database.PeerConnInfo, dialer NetDialer) ([]Peer, error) {
 	var peers []Peer
 	for _, info := range peerConnInfoList {
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", info.Ip, info.Port))
+		conn, err := dialer.Dial(fmt.Sprintf("%s:%d", info.Ip, info.Port))
 		if err != nil {
 			log.Printf("Could not connect to peer: %s\n", err)
 			continue
@@ -21,8 +36,7 @@ func GetPeers(peerConnInfoList []*database.PeerConnInfo) ([]Peer, error) {
 		peerConn := &PeerConn{
 			Conn: conn,
 		}
-		peer := Peer(peerConn)
-		peers = append(peers, peer)
+		peers = append(peers, peerConn)
 	}
 	return peers, nil
 }

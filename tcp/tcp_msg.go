@@ -35,8 +35,7 @@ type Peer interface {
 
 // PeerConn is a Peer with an underlying TCP connection
 type PeerConn struct {
-	net.Conn
-	Peer
+	Conn   net.Conn
 	Closed bool
 }
 
@@ -83,7 +82,7 @@ func (pc *PeerConn) IsClosed() bool {
 
 // ReceiveMsg reads data from the TCP connection and unmarshals it into a PeerMsg
 func (pc *PeerConn) ReceiveMsg() (*PeerMsg, error) {
-	data, err := ReadData(pc)
+	data, err := ReadData(pc.Conn)
 
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -109,7 +108,7 @@ func (pc *PeerConn) SendResp(msg *PeerMsg) error {
 	if err != nil {
 		return err
 	}
-	_, err = pc.Write(append(dataToSend, byte('\n')))
+	_, err = pc.Conn.Write(append(dataToSend, byte('\n')))
 	if err != nil {
 		return err
 	}

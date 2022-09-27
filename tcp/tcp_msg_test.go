@@ -5,52 +5,28 @@ import (
 	"encoding/json"
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"net"
 	"strings"
 	"testing"
-	"time"
 )
 
 type MockConn struct {
+	mock.Mock
+	net.Conn
 	DataToBeRead *bytes.Buffer
 }
 
-func (m MockConn) Read(b []byte) (n int, err error) {
+func (m *MockConn) Read(b []byte) (n int, err error) {
+	_ = m.Called()
 	return m.DataToBeRead.Read(b)
-}
-
-func (m MockConn) Write(b []byte) (n int, err error) {
-	return 0, nil
-}
-
-func (m MockConn) Close() error {
-	return nil
-}
-
-func (m MockConn) LocalAddr() net.Addr {
-	return nil
-}
-
-func (m MockConn) RemoteAddr() net.Addr {
-	return nil
-}
-
-func (m MockConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (m MockConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (m MockConn) SetWriteDeadline(t time.Time) error {
-	return nil
 }
 
 func TestReadData(t *testing.T) {
 	expectedData := "test\n"
 
-	mockConn := &MockConn{bytes.NewBufferString(expectedData)}
+	mockConn := &MockConn{DataToBeRead: bytes.NewBufferString(expectedData)}
+	mockConn.On("Read").Return()
 
 	actualData, _ := ReadData(mockConn)
 	assert.Equal(t, expectedData, string(actualData))
@@ -67,7 +43,8 @@ func TestPeerConn_ReceiveMsg(t *testing.T) {
 		Data: []*block.Block{},
 	}
 	testData, _ := json.Marshal(testMsg)
-	mockConn := &MockConn{bytes.NewBuffer(append(testData, byte('\n')))}
+	mockConn := &MockConn{DataToBeRead: bytes.NewBuffer(append(testData, byte('\n')))}
+	mockConn.On("Read").Return()
 
 	testPeerConn := PeerConn{
 		Conn: mockConn,
