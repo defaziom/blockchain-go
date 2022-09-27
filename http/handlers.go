@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/database"
 	"github.com/defaziom/blockchain-go/tcp"
@@ -44,7 +43,7 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			log.Println(err.Error())
+			log.Printf("Failed to read request body: %s\n", err)
 			http.Error(w, "Error", http.StatusInternalServerError)
 			return
 		}
@@ -52,7 +51,7 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 		mineBlockRequest := &MineBlockRequest{}
 		err = json.Unmarshal(body, mineBlockRequest)
 		if err != nil {
-			log.Println(err.Error())
+			log.Printf("Failed to unmarshal request: %s\n", err)
 			http.Error(w, "Error", http.StatusBadRequest)
 			return
 		}
@@ -60,7 +59,7 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 		newBlock := blockchain.GetBlockChain().MineBlock(mineBlockRequest.Data)
 		err = blockchain.GetBlockChain().AddBlock(newBlock)
 		if err != nil {
-			log.Println(err.Error())
+			log.Printf("Failed to add new block to blockchain: %s\n", err)
 			http.Error(w, "Error", http.StatusInternalServerError)
 			return
 		}
@@ -68,22 +67,18 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 
 		log.Println("Successfully mined a new block!")
 
-		// Broadcast the newly mined block to all peers
-		peers, err := tcp.GetPeers()
+		peerConnList, err := database.GetAllPeerConnInfo()
+		if err != nil {
+			return nil, err
+		}
+		peers, err := tcp.GetPeers(peerConnList)
+
 		if err != nil {
 			log.Println("Failed to get peers: " + err.Error())
 			return
 		}
-		log.Println("Sending block to peers")
-		for _, peer := range peers {
-			err = peer.SendResponseBlockChainMsg([]*block.Block{newBlock})
-			if err != nil {
-				log.Println("Failed to send block to peer: " + err.Error())
-			} else {
-				// Place the peer in the channel to continue processing
-				pc <- peer
-			}
-		}
+		// Broadcast the newly mined block to all peers
+		tcp.BroadCastBlockToPeers(newBlock, peers, pc)
 	})
 }
 

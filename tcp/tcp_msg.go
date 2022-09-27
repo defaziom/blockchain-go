@@ -2,7 +2,9 @@ package tcp
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/defaziom/blockchain-go/block"
+	"io"
 	"net"
 )
 
@@ -84,7 +86,8 @@ func (pc *PeerConn) ReceiveMsg() (*PeerMsg, error) {
 	data, err := ReadData(pc)
 
 	if err != nil {
-		if err.Error() == "EOF" {
+		if errors.Is(err, io.EOF) {
+			// Connection has been closed gracefully
 			return nil, nil
 		} else {
 			return nil, err
