@@ -8,9 +8,9 @@ import (
 )
 
 func StartServer(port int, pc chan tcp.Peer) {
-	http.Handle("/blocks", JsonResponse(BlocksHandler()))
-	http.Handle("/blocks/mine", JsonResponse(MineBlockHandler(pc)))
-	http.Handle("/peers", JsonResponse(PeersHandler()))
+	http.Handle("/blocks", LogMethodAndEndpoint(JsonResponse(BlocksHandler())))
+	http.Handle("/blocks/mine", LogMethodAndEndpoint(JsonResponse(MineBlockHandler(pc))))
+	http.Handle("/peers", LogMethodAndEndpoint(JsonResponse(PeersHandler())))
 	log.Println(fmt.Sprintf("Starting HTTP server on %d", port))
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }

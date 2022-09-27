@@ -69,7 +69,9 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 
 		peerConnList, err := database.GetAllPeerConnInfo()
 		if err != nil {
-			return nil, err
+			log.Printf("Failed to get list of registered peers: %s\n", err)
+			http.Error(w, "Error", http.StatusInternalServerError)
+			return
 		}
 		peers, err := tcp.GetPeers(peerConnList)
 
