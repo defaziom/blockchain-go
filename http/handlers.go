@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/database"
@@ -64,6 +65,8 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
+
+		log.Println("Successfully mined a new block!")
 
 		// Broadcast the newly mined block to all peers
 		peers, err := tcp.GetPeers()
@@ -134,6 +137,8 @@ func PeersHandler() http.Handler {
 			}
 
 			w.WriteHeader(http.StatusCreated)
+
+			log.Println(fmt.Sprintf("Registered peer with IP=%s and port=%d", peerConnInfo.Ip, peerConnInfo.Port))
 		default:
 			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
 			return
