@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/database"
 	"github.com/defaziom/blockchain-go/http"
 	"github.com/defaziom/blockchain-go/task"
@@ -23,9 +24,10 @@ func main() {
 	if err != nil {
 		log.Fatalln("TCP port must be int")
 	}
+	theBlockChain := blockchain.CreateBlockChain()
 	pc := make(chan tcp.Peer)
 	_ = database.GetDatabase()
 	go tcp.StartServer(tcpPort, pc)
-	go task.StartTasks(pc)
-	http.StartServer(httpPort, pc)
+	go task.StartTasks(pc, theBlockChain)
+	http.StartServer(httpPort, pc, theBlockChain)
 }

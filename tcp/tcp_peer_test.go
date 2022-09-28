@@ -46,7 +46,7 @@ func TestGetPeers(t *testing.T) {
 
 	peers, _ := GetPeers(testConnList, mTcpDialer)
 	assert.Len(t, peers, len(testConnList))
-	mTcpDialer.AssertCalled(t, "Dial")
+	mTcpDialer.AssertExpectations(t)
 	for _, p := range peers {
 		peerCon := p.(*PeerConn)
 		assert.NotNil(t, peerCon.Conn)
@@ -70,7 +70,7 @@ func TestBroadCastBlockToPeers(t *testing.T) {
 
 	BroadCastBlockToPeers(testBlock, peers, c)
 
-	mockPeer.AssertCalled(t, "SendResponseBlockChainMsg")
+	mockPeer.AssertExpectations(t)
 	actualPeer := <-c
 	assert.Equal(t, mockPeer, actualPeer)
 }

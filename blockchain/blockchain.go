@@ -83,10 +83,6 @@ func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *SafeDoublyLink
 	return newList
 }
 
-type BlockChain struct {
-	Blocks *SafeDoublyLinkedBlockList
-}
-
 var genesisBlock = &block.Block{
 	Timestamp:     time.Now(),
 	Data:          "Genesis",
@@ -104,23 +100,33 @@ func GetGenesisBlock() *block.Block {
 	return genesisBlock
 }
 
-var blockChain *BlockChain
+type BlockChain interface {
+	MineBlock(data string) *block.Block
+	AddBlock(block *block.Block) error
+	GetBlocks() *SafeDoublyLinkedBlockList
+	GetDifficulty() int
+	GetAdjustedDifficulty() int
+	GetCumulativeDifficulty() float64
+	GetLatestBlock() *block.Block
+	ReplaceChain(newChain BlockChain)
+}
 
-func GetBlockChain() *BlockChain {
-	if blockChain == nil {
-		blockChain = &BlockChain{
-			Blocks: &SafeDoublyLinkedBlockList{
-				Prev:  nil,
-				Next:  nil,
-				Value: GetGenesisBlock(),
-			},
-		}
+type BlockChainIml struct {
+	Blocks *SafeDoublyLinkedBlockList
+}
+
+func CreateBlockChain() *BlockChainIml {
+	return &BlockChainIml{
+		Blocks: &SafeDoublyLinkedBlockList{
+			Prev:  nil,
+			Next:  nil,
+			Value: GetGenesisBlock(),
+		},
 	}
-	return blockChain
 }
 
 // MineBlock Mines a block and returns it
-func (bc *BlockChain) MineBlock(data string) *block.Block {
+func (bc *BlockChainIml) MineBlock(data string) *block.Block {
 
 	lastBlock := bc.GetLatestBlock()
 	b := &block.Block{
@@ -145,7 +151,7 @@ func (bc *BlockChain) MineBlock(data string) *block.Block {
 }
 
 // AddBlock Adds a block to the end of the blockchain. Check to see if the new block is valid.
-func (bc *BlockChain) AddBlock(block *block.Block) error {
+func (bc *BlockChainIml) AddBlock(block *block.Block) error {
 
 	lastBlock := bc.GetLatestBlock()
 	valid, err := IsNewBlockValid(block, lastBlock)
@@ -157,7 +163,7 @@ func (bc *BlockChain) AddBlock(block *block.Block) error {
 	}
 }
 
-func (bc *BlockChain) GetDifficulty() int {
+func (bc *BlockChainIml) GetDifficulty() int {
 	latestBlock := bc.GetLatestBlock()
 
 	if latestBlock.Index%DifficultyAdjustmentIntervalBlocks == 0 && latestBlock.Index != 0 {
@@ -168,7 +174,7 @@ func (bc *BlockChain) GetDifficulty() int {
 
 }
 
-func (bc *BlockChain) GetAdjustedDifficulty() int {
+func (bc *BlockChainIml) GetAdjustedDifficulty() int {
 	latestBlock := bc.GetLatestBlock()
 	prevAdjBlock := bc.Blocks.Last(DifficultyAdjustmentIntervalBlocks).Value
 	timeExpectedSec := BlockGenerationIntervalSec * DifficultyAdjustmentIntervalBlocks
@@ -186,7 +192,7 @@ func (bc *BlockChain) GetAdjustedDifficulty() int {
 	}
 }
 
-func (bc *BlockChain) GetCumulativeDifficulty() float64 {
+func (bc *BlockChainIml) GetCumulativeDifficulty() float64 {
 	difficultySum := 0.0
 	for _, b := range bc.Blocks.ToSlice() {
 		difficultySum += math.Pow(2, float64(b.Difficulty))
@@ -194,14 +200,18 @@ func (bc *BlockChain) GetCumulativeDifficulty() float64 {
 	return difficultySum
 }
 
-func (bc *BlockChain) GetLatestBlock() *block.Block {
+func (bc *BlockChainIml) GetLatestBlock() *block.Block {
 	return bc.Blocks.Value
 }
 
-func (bc *BlockChain) ReplaceChain(newChain *BlockChain) {
+func (bc *BlockChainIml) GetBlocks() *SafeDoublyLinkedBlockList {
+	return bc.Blocks
+}
+
+func (bc *BlockChainIml) ReplaceChain(newChain BlockChain) {
 	if IsValidBlockChain(newChain) && newChain.GetCumulativeDifficulty() > bc.GetCumulativeDifficulty() {
 		log.Println("Received blockchain is valid. Replacing current blockchain with received blockchain")
-		bc.Blocks = newChain.Blocks
+		bc.Blocks = newChain.GetBlocks()
 	} else {
 		log.Println("Received blockchain is invalid.")
 	}
@@ -224,8 +234,8 @@ func IsValidGenesisBlock(block *block.Block) bool {
 	return block.BlockHash == GetGenesisBlock().BlockHash
 }
 
-func IsValidBlockChain(bc *BlockChain) bool {
-	list := bc.Blocks
+func IsValidBlockChain(bc BlockChain) bool {
+	list := bc.GetBlocks()
 	for list.Prev != nil {
 		currentBlock := list.Value
 		prevBlock := list.Prev.Value

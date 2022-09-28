@@ -9,16 +9,6 @@ import (
 )
 import "github.com/stretchr/testify/assert"
 
-func CreateBlockChain() *BlockChain {
-	return &BlockChain{
-		Blocks: &SafeDoublyLinkedBlockList{
-			Prev:  nil,
-			Next:  nil,
-			Value: GetGenesisBlock(),
-		},
-	}
-}
-
 func TestDoublyLinkedBlockList_Add(t *testing.T) {
 	b1 := &block.Block{
 		Timestamp:     time.Now(),

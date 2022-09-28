@@ -16,14 +16,14 @@ type MineBlockRequest struct {
 }
 
 // BlocksHandler GET /blocks
-func BlocksHandler() http.Handler {
+func BlocksHandler(bc blockchain.BlockChain) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
 			return
 		}
 		// Return list of all blocks stored on the chain
-		resp, err := json.Marshal(blockchain.GetBlockChain().Blocks.ToSlice())
+		resp, err := json.Marshal(bc.GetBlocks().ToSlice())
 		if err != nil {
 			http.Error(w, "Error", http.StatusInternalServerError)
 		}
@@ -34,7 +34,7 @@ func BlocksHandler() http.Handler {
 	})
 }
 
-func MineBlockHandler(pc chan tcp.Peer) http.Handler {
+func MineBlockHandler(bc blockchain.BlockChain, pc chan tcp.Peer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
@@ -56,8 +56,8 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 			return
 		}
 
-		newBlock := blockchain.GetBlockChain().MineBlock(mineBlockRequest.Data)
-		err = blockchain.GetBlockChain().AddBlock(newBlock)
+		newBlock := bc.MineBlock(mineBlockRequest.Data)
+		err = bc.AddBlock(newBlock)
 		if err != nil {
 			log.Printf("Failed to add new block to blockchain: %s\n", err)
 			http.Error(w, "Error", http.StatusInternalServerError)
@@ -73,7 +73,7 @@ func MineBlockHandler(pc chan tcp.Peer) http.Handler {
 			http.Error(w, "Error", http.StatusInternalServerError)
 			return
 		}
-		peers, err := tcp.GetPeers(peerConnList)
+		peers, err := tcp.GetPeers(peerConnList, &tcp.TcpDialer{})
 
 		if err != nil {
 			log.Println("Failed to get peers: " + err.Error())
