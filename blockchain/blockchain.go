@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// Implementation of a threadsafe doubly linked list
 type SafeDoublyLinkedBlockList struct {
 	Prev  *SafeDoublyLinkedBlockList
 	Next  *SafeDoublyLinkedBlockList
@@ -68,6 +69,7 @@ func (list *SafeDoublyLinkedBlockList) ToSlice() []*block.Block {
 	return slice
 }
 
+// DoublyLinkedBlockListCreateFromSlice converts a SafeDoublyLinkedBlockList into a slice
 func DoublyLinkedBlockListCreateFromSlice(blocks []*block.Block) *SafeDoublyLinkedBlockList {
 	newList := &SafeDoublyLinkedBlockList{
 		Value: nil,
