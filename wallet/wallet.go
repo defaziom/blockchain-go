@@ -7,13 +7,18 @@ import (
 
 type Wallet interface {
 	SendToAddress(amount int, address string)
-	GetBalance() int
+	GetWallet() *Info
 }
 
 type Service struct {
 	TxService  transaction.Service
 	PrivateKey string
 	Address    string
+}
+
+type Info struct {
+	Address string
+	Balance int
 }
 
 func (w *Service) SendToAddress(amount int, address string) (*transaction.TransactionIml, error) {
@@ -31,8 +36,11 @@ func (w *Service) SendToAddress(amount int, address string) (*transaction.Transa
 	return tx, nil
 }
 
-func (w *Service) GetBalance() int {
-	return w.TxService.GetTotalUnspentTxOutAmount(w.Address)
+func (w *Service) GetInfo() *Info {
+	return &Info{
+		Address: w.Address,
+		Balance: w.TxService.GetTotalUnspentTxOutAmount(w.Address),
+	}
 }
 
 func GetWalletFromPrivateKey(key string, ts transaction.Service) (*Service, error) {

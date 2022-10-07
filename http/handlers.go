@@ -6,6 +6,7 @@ import (
 	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/database"
 	"github.com/defaziom/blockchain-go/tcp"
+	"github.com/defaziom/blockchain-go/wallet"
 	"io"
 	"log"
 	"net/http"
@@ -139,6 +140,35 @@ func PeersHandler() http.Handler {
 		default:
 			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
 			return
+		}
+	})
+}
+
+func GetTxHandler(ws wallet.Service) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	})
+}
+
+func MineTxHandler(bc blockchain.BlockChain, ws wallet.Service, pc chan tcp.Peer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	})
+}
+
+func WalletHandler(ws wallet.Service) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			http.Error(w, "Method is not supported.", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Return wallet info
+		resp, err := json.Marshal(ws.GetInfo())
+		if err != nil {
+			http.Error(w, "Error", http.StatusInternalServerError)
+		}
+		_, err = w.Write(resp)
+		if err != nil {
+			http.Error(w, "Error", http.StatusInternalServerError)
 		}
 	})
 }
