@@ -46,21 +46,31 @@ type MockValidator struct {
 	Validator
 }
 
-func (m *MockValidator) ValidateCoinbaseTx(blockIndex int) (valid bool, reason string) {
-	a := m.Called(blockIndex)
+func (m *MockValidator) ValidateCoinbaseTx(t Transaction, blockIndex int) (valid bool, reason string) {
+	a := m.Called(t, blockIndex)
 	return a.Get(0).(bool), a.Get(1).(string)
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockValidator) ValidateTxAmount() bool {
-	a := m.Called()
+func (m *MockValidator) ValidateTxAmount(t Transaction) bool {
+	a := m.Called(t)
 	return a.Get(0).(bool)
 }
 
-func (m *MockValidator) ValidateTxId() bool {
-	a := m.Called()
+func (m *MockValidator) ValidateTxId(t Transaction) bool {
+	a := m.Called(t)
 	return a.Get(0).(bool)
+}
+
+func (m *MockValidator) ContainsDuplicates(txs []Transaction) bool {
+	a := m.Called(txs)
+	return a.Get(0).(bool)
+}
+
+func (m *MockValidator) ValidateSignedTx(txIn SignedTx, id string) (bool, string) {
+	a := m.Called(txIn, id)
+	return a.Get(0).(bool), a.Get(1).(string)
 }
 
 func TestTransactionIml_CalcTransactionId(t *testing.T) {
@@ -233,4 +243,74 @@ func TestTxIn_SignAndValidate(t *testing.T) {
 	valid, reason := txIn.Validate(hex.EncodeToString([]byte("moustache")))
 	assert.True(t, valid, reason)
 	assert.Empty(t, reason)
+}
+
+func TestUnspentTxOutSlice_Update(t *testing.T) {
+	var unspentTxOuts UnspentTxOutSlice
+	unspentTxOuts = []*UnspentTxOut{{TxOutId: "one", TxOutIndex: 0}, {TxOutId: "two", TxOutIndex: 1},
+		{TxOutId: "three", TxOutIndex: 2}}
+	txs := []*TransactionIml{{
+		Id: "moustache",
+		TxIns: []*TxIn{
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "one", TxOutIndex: 0}},
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "three", TxOutIndex: 2}},
+		},
+		TxOuts: []*TxOut{
+			{Address: "Bob Ross' address", Amount: 42},
+		},
+	}}
+
+	var transactions []Transaction
+	for _, v := range txs {
+		transactions = append(transactions, v)
+	}
+
+	unspentTxOuts.Update(transactions)
+	assert.Len(t, unspentTxOuts, 2)
+	assert.Contains(t, unspentTxOuts, &UnspentTxOut{
+		TxOutId:    "moustache",
+		TxOutIndex: 0,
+		Address:    "Bob Ross' address",
+		Amount:     42,
+	})
+	assert.Contains(t, unspentTxOuts, &UnspentTxOut{TxOutId: "two", TxOutIndex: 1})
+}
+
+func TestUnspentTxOutSlice_Find(t *testing.T) {
+	var unspentTxOuts UnspentTxOutSlice
+	unspentTxOuts = []*UnspentTxOut{{TxOutId: "one", TxOutIndex: 0}, {TxOutId: "two", TxOutIndex: 1},
+		{TxOutId: "three", TxOutIndex: 2}}
+
+	found := unspentTxOuts.Find("two", 1)
+	assert.Equal(t, &UnspentTxOut{TxOutId: "two", TxOutIndex: 1}, found)
+
+	notFound := unspentTxOuts.Find("moustache", 42)
+	assert.Nil(t, notFound)
+}
+
+func TestServiceIml_ValidateBlockTransactions(t *testing.T) {
+	mV := &MockValidator{}
+	mV.On("ValidateCoinbaseTx", mock.Anything, mock.Anything).Return(true, "")
+	mV.On("ContainsDuplicates", mock.Anything).Return(false)
+	mV.On("ValidateTxId", mock.Anything).Return(true)
+	mV.On("ValidateSignedTx", mock.Anything, mock.Anything).Return(true, "")
+	mV.On("ValidateTxAmount", mock.Anything).Return(true)
+
+	txs := make([]Transaction, 2)
+	txs[0] = &TransactionIml{}
+	txs[1] = &TransactionIml{TxIns: []*TxIn{{}}}
+
+	s := &ServiceIml{Validator: mV}
+
+	valid, reason := s.ValidateBlockTransactions(txs, 42)
+	mV.AssertExpectations(t)
+	assert.True(t, valid, reason)
+}
+
+func TestCreateCoinbaseTransaction(t *testing.T) {
+	cbTx := CreateCoinbaseTransaction(hex.EncodeToString([]byte("bob ross address")), 42)
+	v := &TxValidator{}
+
+	valid, reason := v.ValidateCoinbaseTx(cbTx, 42)
+	assert.True(t, valid, reason)
 }

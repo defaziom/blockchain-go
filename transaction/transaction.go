@@ -238,17 +238,13 @@ func (txIn *TxIn) Validate(data string) (valid bool, reason string) {
 	return valid, reason
 }
 
-func (u *UnspentTxOutSlice) Update(transactions []Transaction) {
-	txs := make([]*TransactionIml, len(transactions))
-	for i, v := range transactions {
-		txs[i] = v.(*TransactionIml)
-	}
+func (u *UnspentTxOutSlice) Update(txs []Transaction) {
 	// Collect new unspent transactions created by new transactions
 	var newUnspentTxOuts []*UnspentTxOut
 	for _, t := range txs {
-		for i, txOut := range t.TxOuts {
+		for i, txOut := range t.GetTxOuts() {
 			newUnspentTxOuts = append(newUnspentTxOuts, &UnspentTxOut{
-				TxOutId:    t.Id,
+				TxOutId:    t.GetId(),
 				TxOutIndex: i,
 				Address:    txOut.Address,
 				Amount:     txOut.Amount,
@@ -259,7 +255,7 @@ func (u *UnspentTxOutSlice) Update(transactions []Transaction) {
 	// Build a list of UnspentTxOuts consumed by new transactions
 	var consumedTxOuts UnspentTxOutSlice
 	for _, t := range txs {
-		for _, txIn := range t.TxIns {
+		for _, txIn := range t.GetTxIns() {
 			consumedTxOuts = append(consumedTxOuts, &UnspentTxOut{
 				TxOutId:    txIn.UnspentTxOut.TxOutId,
 				TxOutIndex: txIn.UnspentTxOut.TxOutIndex,
