@@ -314,3 +314,104 @@ func TestCreateCoinbaseTransaction(t *testing.T) {
 	valid, reason := v.ValidateCoinbaseTx(cbTx, 42)
 	assert.True(t, valid, reason)
 }
+
+func TestServiceIml_GetTotalUnspentTxOutAmount(t *testing.T) {
+	unspentTxOuts := UnspentTxOutSlice([]*UnspentTxOut{
+		{Address: "Mr Bob Ross", Amount: 42},
+		{Address: "Mr Bob Ross", Amount: 24},
+		{Address: "Mr Moustache", Amount: 64},
+	})
+	s := &ServiceIml{UnspentTxOuts: &unspentTxOuts}
+	total := s.GetTotalUnspentTxOutAmount("Mr Bob Ross")
+	assert.Equal(t, 66, total)
+}
+
+func TestServiceIml_GetUnspentTxOutsForAmount(t *testing.T) {
+
+	bobRossTxOut1 := &UnspentTxOut{Address: "Mr Bob Ross", Amount: 42}
+	bobRossTxOut2 := &UnspentTxOut{Address: "Mr Bob Ross", Amount: 24}
+
+	unspentTxOuts := UnspentTxOutSlice([]*UnspentTxOut{
+		bobRossTxOut1, bobRossTxOut2,
+		{Address: "Mr Moustache", Amount: 64},
+	})
+	s := &ServiceIml{UnspentTxOuts: &unspentTxOuts}
+
+	t.Run("NoLeftover", func(t *testing.T) {
+		txOuts, rem, err := s.GetUnspentTxOutsForAmount(66, "Mr Bob Ross")
+		assert.NoError(t, err)
+		assert.Equal(t, txOuts, []*UnspentTxOut{bobRossTxOut1, bobRossTxOut2})
+		assert.Equal(t, 0, rem)
+	})
+
+	t.Run("Leftover", func(t *testing.T) {
+		txOuts, rem, err := s.GetUnspentTxOutsForAmount(60, "Mr Bob Ross")
+		assert.NoError(t, err)
+		assert.Equal(t, txOuts, []*UnspentTxOut{bobRossTxOut1, bobRossTxOut2})
+		assert.Equal(t, 6, rem)
+	})
+
+	t.Run("InsufficientAmount", func(t *testing.T) {
+		_, _, err := s.GetUnspentTxOutsForAmount(100, "Mr Bob Ross")
+		assert.Error(t, err)
+	})
+}
+
+func TestServiceIml_UnspentTxOutToTxIn(t *testing.T) {
+	unspentTxOuts := UnspentTxOutSlice([]*UnspentTxOut{
+		{Address: "Mr Bob Ross", Amount: 42},
+		{Address: "Mr Bob Ross", Amount: 24},
+		{Address: "Mr Moustache", Amount: 64},
+	})
+	s := &ServiceIml{}
+	txIns := s.UnspentTxOutToTxIn(unspentTxOuts)
+
+	assert.Len(t, txIns, len(unspentTxOuts))
+	for _, v := range txIns {
+		assert.Contains(t, unspentTxOuts, v.UnspentTxOut)
+	}
+}
+
+func TestServiceIml_CreateTxOuts(t *testing.T) {
+	s := &ServiceIml{}
+
+	t.Run("NoLeftovers", func(t *testing.T) {
+		expectedSender := "Mr Bob Ross"
+		expectedRecipient := "Mr Moustache"
+		txOuts := s.CreateTxOuts(expectedSender, expectedRecipient, 42, 0)
+		assert.Len(t, txOuts, 1)
+		assert.Equal(t, expectedRecipient, txOuts[0].Address)
+	})
+
+	t.Run("Leftovers", func(t *testing.T) {
+		expectedSender := "Mr Bob Ross"
+		expectedRecipient := "Mr Moustache"
+		expectedAmount := 42
+		expectedLeftover := 99
+		txOuts := s.CreateTxOuts(expectedSender, expectedRecipient, expectedAmount, expectedLeftover)
+		assert.Len(t, txOuts, 2)
+		assert.Contains(t, txOuts, &TxOut{Address: expectedRecipient, Amount: expectedAmount})
+		assert.Contains(t, txOuts, &TxOut{Address: expectedSender, Amount: expectedLeftover})
+	})
+}
+
+func TestServiceIml_CreateTransaction(t *testing.T) {
+	key, _ := GeneratePrivateKey()
+	addr, _ := GetPublicKeyFromPrivateKey(key)
+	txIns := []*TxIn{
+		{UnspentTxOut: &UnspentTxOut{TxOutId: "one", TxOutIndex: 0, Address: addr}},
+		{UnspentTxOut: &UnspentTxOut{TxOutId: "two", TxOutIndex: 1, Address: addr}},
+	}
+	txOuts := []*TxOut{{Address: "Mr Bob Ross", Amount: 42}, {Address: "Mr Moustache", Amount: 99}}
+	s := &ServiceIml{}
+
+	tx, err := s.CreateTransaction(txIns, txOuts, key)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, tx.Id)
+	assert.Equal(t, txIns, tx.TxIns)
+	assert.Equal(t, txOuts, tx.TxOuts)
+
+	for _, v := range txIns {
+		assert.NotEmpty(t, v.Signature)
+	}
+}

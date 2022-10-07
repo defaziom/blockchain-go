@@ -429,7 +429,7 @@ func (s *ServiceIml) CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKe
 	for _, txIn := range tx.TxIns {
 		err := txIn.Sign(tx.Id, privateKey)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to sign TxIn for transaction: %w", err)
 		}
 	}
 
@@ -445,4 +445,14 @@ func GeneratePrivateKey() (string, error) {
 	hexKey := &HexPrivateKey{PrivateKey: *key}
 
 	return hexKey.Marshal(), nil
+}
+
+func GetPublicKeyFromPrivateKey(key string) (string, error) {
+	privateKey := &HexPrivateKey{}
+	err := privateKey.UnMarshal(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to get public key: %w", err)
+	}
+	pubKey := &HexPublicKey{PublicKey: privateKey.PublicKey}
+	return pubKey.Marshal(), nil
 }

@@ -10,20 +10,20 @@ type Wallet interface {
 	GetBalance() int
 }
 
-type WalletService struct {
-	transaction.Service
+type Service struct {
+	TxService  transaction.Service
 	PrivateKey string
 	Address    string
 }
 
-func (w *WalletService) SendToAddress(amount int, address string) (*transaction.TransactionIml, error) {
-	unspentTxOuts, leftover, err := w.Service.GetUnspentTxOutsForAmount(amount, w.Address)
+func (w *Service) SendToAddress(amount int, address string) (*transaction.TransactionIml, error) {
+	unspentTxOuts, leftover, err := w.TxService.GetUnspentTxOutsForAmount(amount, w.Address)
 	if err != nil {
 		return nil, fmt.Errorf("error sending to address: %w", err)
 	}
-	txIns := w.Service.UnspentTxOutToTxIn(unspentTxOuts)
-	txOuts := w.Service.CreateTxOuts(w.Address, address, amount, leftover)
-	tx, err := w.Service.CreateTransaction(txIns, txOuts, w.PrivateKey)
+	txIns := w.TxService.UnspentTxOutToTxIn(unspentTxOuts)
+	txOuts := w.TxService.CreateTxOuts(w.Address, address, amount, leftover)
+	tx, err := w.TxService.CreateTransaction(txIns, txOuts, w.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("error sending to address: %w", err)
 	}
@@ -31,6 +31,19 @@ func (w *WalletService) SendToAddress(amount int, address string) (*transaction.
 	return tx, nil
 }
 
-func (w *WalletService) GetBalance() int {
-	return w.Service.GetTotalUnspentTxOutAmount(w.Address)
+func (w *Service) GetBalance() int {
+	return w.TxService.GetTotalUnspentTxOutAmount(w.Address)
+}
+
+func GetWalletFromPrivateKey(key string, ts transaction.Service) (*Service, error) {
+	w := &Service{
+		TxService:  ts,
+		PrivateKey: key,
+	}
+	address, err := transaction.GetPublicKeyFromPrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("could not generate wallet from private key: %w", err)
+	}
+	w.Address = address
+	return w, nil
 }
