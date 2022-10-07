@@ -29,7 +29,6 @@ type SignedTx interface {
 type TxIn struct {
 	UnspentTxOut *UnspentTxOut
 	Signature    string
-	SignedTx
 }
 
 type UnspentTxOut struct {
@@ -88,6 +87,11 @@ type HexPrivateKey struct {
 type Service interface {
 	ProcessTransactions(transactions []Transaction, unspentTxOuts UnspentTxOutList, blockIndex int) error
 	ValidateBlockTransactions(v Validator, transactions []Transaction, blockIndex int) (valid bool, reason string)
+	GetTotalUnspentTxOutAmount(addr string) int
+	GetUnspentTxOutsForAmount(amount int, address string) ([]*UnspentTxOut, int, error)
+	UnspentTxOutToTxIn(unspentTxOuts []*UnspentTxOut) []*TxIn
+	CreateTxOuts(sender string, recipient string, amount int, leftover int) []*TxOut
+	CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKey string) (*TransactionIml, error)
 }
 
 type ServiceIml struct {
@@ -367,6 +371,69 @@ func (s *ServiceIml) ProcessTransactions(transactions []Transaction, blockIndex 
 
 	s.UnspentTxOuts.Update(transactions)
 	return nil
+}
+
+func (s *ServiceIml) GetTotalUnspentTxOutAmount(addr string) int {
+	total := 0
+	for _, unspentTxOut := range *s.UnspentTxOuts {
+		if addr == unspentTxOut.Address {
+			total += unspentTxOut.Amount
+		}
+	}
+	return total
+}
+
+func (s *ServiceIml) GetUnspentTxOutsForAmount(amount int, address string) ([]*UnspentTxOut, int, error) {
+	totalUnspentTxOutAmount := 0
+	var unspentTxOuts []*UnspentTxOut
+	for _, unspentTxOut := range *s.UnspentTxOuts {
+		if address == unspentTxOut.Address {
+			totalUnspentTxOutAmount += unspentTxOut.Amount
+			unspentTxOuts = append(unspentTxOuts, unspentTxOut)
+			if totalUnspentTxOutAmount >= amount {
+				return unspentTxOuts, totalUnspentTxOutAmount - amount, nil
+			}
+		}
+	}
+	return nil, 0, errors.New("Insufficient amount for address " + address)
+}
+
+func (s *ServiceIml) UnspentTxOutToTxIn(unspentTxOuts []*UnspentTxOut) []*TxIn {
+	txIns := make([]*TxIn, len(unspentTxOuts))
+	for i, unspentTxOut := range unspentTxOuts {
+		txIns[i] = &TxIn{
+			UnspentTxOut: unspentTxOut,
+		}
+	}
+
+	return txIns
+}
+
+func (s *ServiceIml) CreateTxOuts(sender string, recipient string, amount int, leftover int) []*TxOut {
+	txOuts := []*TxOut{{Address: recipient, Amount: amount}}
+
+	if leftover > 0 {
+		return append(txOuts, &TxOut{Address: sender, Amount: leftover})
+	} else {
+		return txOuts
+	}
+}
+
+func (s *ServiceIml) CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKey string) (*TransactionIml, error) {
+	tx := &TransactionIml{
+		TxIns:  txIns,
+		TxOuts: txOuts,
+	}
+	tx.Id = tx.CalcTransactionId()
+
+	for _, txIn := range tx.TxIns {
+		err := txIn.Sign(tx.Id, privateKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return tx, nil
 }
 
 func GeneratePrivateKey() (string, error) {
