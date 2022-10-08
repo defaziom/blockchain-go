@@ -415,3 +415,46 @@ func TestServiceIml_CreateTransaction(t *testing.T) {
 		assert.NotEmpty(t, v.Signature)
 	}
 }
+
+func TestPoolSlice_Add(t *testing.T) {
+	p := PoolSlice([]*TransactionIml{{Id: "Bob Ross tx"}})
+	p.Add(&TransactionIml{Id: "Moustache tx"})
+
+	assert.Len(t, p, 2)
+	assert.Equal(t, &TransactionIml{Id: "Moustache tx"}, p[1])
+}
+
+func TestPoolSlice_Replace(t *testing.T) {
+	p := PoolSlice([]*TransactionIml{{Id: "Bob Ross tx"}, {Id: "Moustache tx"}})
+	replacementPool := []Transaction{&TransactionIml{Id: "Other Bob Ross tx"}, &TransactionIml{Id: "Other Moustache tx"}}
+	p.Replace(replacementPool)
+
+	assert.Len(t, p, 2)
+	assert.Equal(t, []*TransactionIml{{Id: "Other Bob Ross tx"}, {Id: "Other Moustache tx"}}, []*TransactionIml(p))
+}
+
+func TestPoolSlice_Update(t *testing.T) {
+	tx1 := &TransactionIml{
+		TxIns: []*TxIn{
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "1", TxOutIndex: 0}},
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "2", TxOutIndex: 1}},
+		},
+		Id: "one",
+	}
+	tx2 := &TransactionIml{
+		TxIns: []*TxIn{
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "3", TxOutIndex: 2}},
+			{UnspentTxOut: &UnspentTxOut{TxOutId: "4", TxOutIndex: 3}},
+		},
+		Id: "two",
+	}
+	p := PoolSlice([]*TransactionIml{tx1, tx2})
+
+	unspentTxOuts := UnspentTxOutSlice([]*UnspentTxOut{
+		{TxOutId: "4", TxOutIndex: 3},
+		{TxOutId: "3", TxOutIndex: 2},
+	})
+	p.Update(&unspentTxOuts)
+	assert.Len(t, p, 1)
+	assert.Contains(t, p, tx2)
+}

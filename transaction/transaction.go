@@ -92,12 +92,22 @@ type Service interface {
 	UnspentTxOutToTxIn(unspentTxOuts []*UnspentTxOut) []*TxIn
 	CreateTxOuts(sender string, recipient string, amount int, leftover int) []*TxOut
 	CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKey string) (*TransactionIml, error)
+	Pool() *PoolSlice
 }
 
 type ServiceIml struct {
 	UnspentTxOuts *UnspentTxOutSlice
 	Validator
+	Pool
 }
+
+type Pool interface {
+	Replace(pool []Transaction)
+	Update(list UnspentTxOutList)
+	Add(tx Transaction)
+}
+
+type PoolSlice []*TransactionIml
 
 func (t *TransactionIml) CalcTransactionId() string {
 	var txInContent string
@@ -434,6 +444,28 @@ func (s *ServiceIml) CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKe
 	}
 
 	return tx, nil
+}
+
+func (p *PoolSlice) Replace(pool []Transaction) {
+	*p = make([]*TransactionIml, len(pool))
+	for i, tx := range pool {
+		(*p)[i] = tx.(*TransactionIml)
+	}
+}
+func (p *PoolSlice) Update(unspentTxOuts UnspentTxOutList) {
+	var newPool []*TransactionIml
+	for _, tx := range *p {
+		for _, txIn := range tx.TxIns {
+			if unspentTxOuts.Find(txIn.UnspentTxOut.TxOutId, txIn.UnspentTxOut.TxOutIndex) != nil {
+				newPool = append(newPool, tx)
+				break
+			}
+		}
+	}
+	*p = newPool
+}
+func (p *PoolSlice) Add(tx Transaction) {
+	*p = append(*p, tx.(*TransactionIml))
 }
 
 func GeneratePrivateKey() (string, error) {
