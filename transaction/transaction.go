@@ -60,6 +60,7 @@ type Validator interface {
 	ValidateTxId(t Transaction) bool
 	ValidateSignedTx(signedTx SignedTx, data string) (valid bool, reason string)
 	ContainsDuplicates(txs []Transaction) bool
+	ValidateTxForPool(t Transaction, p Pool) bool
 }
 
 type TxValidator struct {
@@ -87,6 +88,7 @@ type HexPrivateKey struct {
 type Service interface {
 	ProcessTransactions(transactions []Transaction, unspentTxOuts UnspentTxOutList, blockIndex int) error
 	ValidateBlockTransactions(v Validator, transactions []Transaction, blockIndex int) (valid bool, reason string)
+	ValidateTransaction(t Transaction) (valid bool, reason string)
 	GetTotalUnspentTxOutAmount(addr string) int
 	GetUnspentTxOutsForAmount(amount int, address string) ([]*UnspentTxOut, int, error)
 	UnspentTxOutToTxIn(unspentTxOuts []*UnspentTxOut) []*TxIn
@@ -105,6 +107,7 @@ type Pool interface {
 	Replace(pool []Transaction)
 	Update(list UnspentTxOutList)
 	Add(tx Transaction)
+	GetTxIns() map[string]*TxIn
 }
 
 type PoolSlice []*TransactionIml
@@ -204,6 +207,20 @@ func (v *TxValidator) ContainsDuplicates(txs []Transaction) bool {
 	}
 
 	return len(txInMap) < txInTotal
+}
+
+func (v *TxValidator) ValidateTxForPool(tx Transaction, p Pool) bool {
+
+	pTxInMap := p.GetTxIns()
+	for _, txIn := range tx.GetTxIns() {
+		lookup := fmt.Sprint(txIn.UnspentTxOut.TxOutId, txIn.UnspentTxOut.TxOutIndex)
+		_, exists := pTxInMap[lookup]
+		if exists {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (txIn *TxIn) Sign(data string, privateKeyHex string) error {
@@ -364,6 +381,27 @@ func (s *ServiceIml) ValidateBlockTransactions(transactions []Transaction, block
 	return true, ""
 }
 
+func (s *ServiceIml) ValidateTransaction(t Transaction) (valid bool, reason string) {
+	// Validate ID
+	if !s.Validator.ValidateTxId(t) {
+		return false, "invalid tx ID: " + t.GetId()
+	}
+
+	// Validate all TxIns
+	for _, txIn := range t.GetTxIns() {
+		valid, reason = s.Validator.ValidateSignedTx(txIn, t.GetId())
+		if !valid {
+			return
+		}
+	}
+
+	// Validate tx amounts
+	if !s.Validator.ValidateTxAmount(t) {
+		return false, "total TxOut Amount does not equal total TxIn Amount for TxId: " + t.GetId()
+	}
+	return true, ""
+}
+
 func CreateCoinbaseTransaction(addr string, blockIndex int) *TransactionIml {
 	t := &TransactionIml{
 		Id:     "",
@@ -464,8 +502,21 @@ func (p *PoolSlice) Update(unspentTxOuts UnspentTxOutList) {
 	}
 	*p = newPool
 }
+
 func (p *PoolSlice) Add(tx Transaction) {
 	*p = append(*p, tx.(*TransactionIml))
+}
+
+func (p *PoolSlice) GetTxIns() map[string]*TxIn {
+	txInMap := make(map[string]*TxIn, len(*p))
+	for _, tx := range *p {
+		for _, txIn := range tx.TxIns {
+			lookup := fmt.Sprint(txIn.UnspentTxOut.TxOutId, txIn.UnspentTxOut.TxOutIndex)
+			txInMap[lookup] = txIn
+		}
+	}
+
+	return txInMap
 }
 
 func GeneratePrivateKey() (string, error) {

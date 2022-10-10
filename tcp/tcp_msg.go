@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/defaziom/blockchain-go/block"
+	"github.com/defaziom/blockchain-go/transaction"
 	"io"
 	"net"
 )
@@ -11,16 +12,18 @@ import (
 type PeerMsgType int
 
 const (
-	ACK                 PeerMsgType = iota // Signals end of communication with a Peer
-	QUERY_LATEST                           // Asks for the latest block held by a Peer
-	QUERY_ALL                              // Ask for the entire blockchain held by a Peer
-	RESPONSE_BLOCKCHAIN                    // Contains a single block, or an entire blockchain
+	ACK                       PeerMsgType = iota // Signals end of communication with a Peer
+	QUERY_LATEST                                 // Asks for the latest block held by a Peer
+	QUERY_ALL                                    // Ask for the entire blockchain held by a Peer
+	RESPONSE_BLOCKCHAIN                          // Contains a single block, or an entire blockchain
+	QUERY_TRANSACTION_POOL                       // Asks a Peer for the transaction pool it holds
+	RESPONSE_TRANSACTION_POOL                    // Contains a list of pending transactions
 )
 
 // PeerMsg is a message from a blockchain peer
 type PeerMsg struct {
 	Type PeerMsgType
-	Data []*block.Block
+	Data []byte
 }
 
 // Peer represents a blockchain peer with methods to interact with
@@ -29,7 +32,9 @@ type Peer interface {
 	IsClosed() bool
 	ReceiveMsg() (*PeerMsg, error)
 	SendResponseBlockChainMsg(blocks []*block.Block) error
+	SendResponseTransactionPoolMsg(txs *transaction.PoolSlice) error
 	SendQueryAllMsg() error
+	SendQueryTransactionPoolMsg() error
 	SendAckMsg() error
 }
 
@@ -40,6 +45,24 @@ type PeerConn struct {
 }
 
 const readBufferSizeBytes = 1024
+
+func (m PeerMsg) GetBlocks() ([]*block.Block, error) {
+	var blocks []*block.Block
+	err := json.Unmarshal(m.Data, &blocks)
+	if err != nil {
+		return nil, err
+	}
+	return blocks, nil
+}
+
+func (m PeerMsg) GetTransactions() ([]*transaction.TransactionIml, error) {
+	var txs []*transaction.TransactionIml
+	err := json.Unmarshal(m.Data, &txs)
+	if err != nil {
+		return nil, err
+	}
+	return txs, nil
+}
 
 // ReadData reads data from a TCP connection until it receives a '\n' and returns it.
 func ReadData(conn net.Conn) ([]byte, error) {
@@ -117,22 +140,45 @@ func (pc *PeerConn) SendResp(msg *PeerMsg) error {
 }
 
 func (pc *PeerConn) SendResponseBlockChainMsg(blocks []*block.Block) error {
+	data, err := json.Marshal(blocks)
+	if err != nil {
+		return err
+	}
 	return pc.SendResp(&PeerMsg{
 		Type: RESPONSE_BLOCKCHAIN,
-		Data: blocks,
+		Data: data,
 	})
 }
 
 func (pc *PeerConn) SendQueryAllMsg() error {
+
 	return pc.SendResp(&PeerMsg{
 		Type: QUERY_ALL,
-		Data: []*block.Block{},
+		Data: nil,
 	})
 }
 
 func (pc *PeerConn) SendAckMsg() error {
 	return pc.SendResp(&PeerMsg{
 		Type: ACK,
-		Data: []*block.Block{},
+		Data: nil,
+	})
+}
+
+func (pc *PeerConn) SendQueryTransactionPoolMsg() error {
+	return pc.SendResp(&PeerMsg{
+		Type: QUERY_TRANSACTION_POOL,
+		Data: nil,
+	})
+}
+
+func (pc *PeerConn) SendResponseTransactionPoolMsg(tx *transaction.PoolSlice) error {
+	data, err := json.Marshal(tx)
+	if err != nil {
+		return err
+	}
+	return pc.SendResp(&PeerMsg{
+		Type: QUERY_TRANSACTION_POOL,
+		Data: data,
 	})
 }

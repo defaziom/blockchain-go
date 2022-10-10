@@ -73,6 +73,16 @@ func (m *MockValidator) ValidateSignedTx(txIn SignedTx, id string) (bool, string
 	return a.Get(0).(bool), a.Get(1).(string)
 }
 
+type MockPool struct {
+	mock.Mock
+	Pool
+}
+
+func (m *MockPool) GetTxIns() map[string]*TxIn {
+	a := m.Called()
+	return a.Get(0).(map[string]*TxIn)
+}
+
 func TestTransactionIml_CalcTransactionId(t *testing.T) {
 	txIns := []*TxIn{{
 		UnspentTxOut: &UnspentTxOut{
@@ -221,6 +231,37 @@ func TestTxValidator_ContainsDuplicates(t *testing.T) {
 		tx2.TxIns = []*TxIn{{UnspentTxOut: uTxOut3}, {UnspentTxOut: uTxOut1}}
 
 		assert.True(t, v.ContainsDuplicates([]Transaction{tx1, tx2}))
+	})
+}
+
+func TestTxValidator_ValidateTxInsForPool(t *testing.T) {
+
+	t.Run("Valid", func(t *testing.T) {
+		txInMap := map[string]*TxIn{"moustache1": {}, "bobross3": {}}
+		txIns := []*TxIn{{UnspentTxOut: &UnspentTxOut{TxOutId: "moustachewax", TxOutIndex: 1}}}
+		tx := &TransactionIml{TxIns: txIns}
+		mP := &MockPool{}
+		mP.On("GetTxIns").Return(txInMap)
+
+		v := &TxValidator{}
+		valid := v.ValidateTxForPool(tx, mP)
+
+		mP.AssertExpectations(t)
+		assert.True(t, valid)
+	})
+
+	t.Run("Invalid", func(t *testing.T) {
+		txInMap := map[string]*TxIn{"moustache1": {}, "bobross3": {}}
+		txIns := []*TxIn{{UnspentTxOut: &UnspentTxOut{TxOutId: "moustache", TxOutIndex: 1}}}
+		tx := &TransactionIml{TxIns: txIns}
+		mP := &MockPool{}
+		mP.On("GetTxIns").Return(txInMap)
+
+		v := &TxValidator{}
+		valid := v.ValidateTxForPool(tx, mP)
+
+		mP.AssertExpectations(t)
+		assert.False(t, valid)
 	})
 }
 
@@ -457,4 +498,37 @@ func TestPoolSlice_Update(t *testing.T) {
 	p.Update(&unspentTxOuts)
 	assert.Len(t, p, 1)
 	assert.Contains(t, p, tx2)
+}
+
+func TestPoolSlice_GetTxIns(t *testing.T) {
+	expectedTxIns := make([]*TxIn, 4)
+	for i := 0; i < 4; i++ {
+		expectedTxIns[i] = &TxIn{UnspentTxOut: &UnspentTxOut{
+			TxOutId: "moustache", TxOutIndex: i,
+		}}
+	}
+	tx1 := &TransactionIml{
+		TxIns: expectedTxIns[:2],
+		Id:    "one",
+	}
+	tx2 := &TransactionIml{
+		TxIns: expectedTxIns[2:],
+		Id:    "two",
+	}
+	p := PoolSlice([]*TransactionIml{tx1, tx2})
+
+	txIns := p.GetTxIns()
+
+	v, ok := txIns["moustache0"]
+	assert.True(t, ok)
+	assert.NotNil(t, v)
+	v, ok = txIns["moustache1"]
+	assert.True(t, ok)
+	assert.NotNil(t, v)
+	v, ok = txIns["moustache2"]
+	assert.True(t, ok)
+	assert.NotNil(t, v)
+	v, ok = txIns["moustache3"]
+	assert.True(t, ok)
+	assert.NotNil(t, v)
 }

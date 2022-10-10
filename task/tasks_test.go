@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/blockchain"
 	"github.com/defaziom/blockchain-go/tcp"
@@ -94,6 +95,10 @@ func (m *MockBlockChain) ReplaceChain(bc blockchain.BlockChain) {
 	return
 }
 
+type MockPool struct {
+	mock.Mock
+}
+
 func TestPeerJobExecutor_Start(t *testing.T) {
 	mTask := &MockTask{}
 	mTask.On("Execute").Return(nil).Times(5)
@@ -161,24 +166,25 @@ func TestQueryLatest_Execute(t *testing.T) {
 	mPeer := &MockPeer{}
 	mPeer.On("SendResponseBlockChainMsg", []*block.Block{testBlock}).Return(nil)
 
-	queryLatestTask := &QueryLatest{
-		Block:       testBlock,
-		PeerMsgTask: &PeerMsgTask{Peer: mPeer},
-	}
+	mBlockChain := &MockBlockChain{}
+	mBlockChain.On("GetLatestBlock").Return(testBlock)
+
+	queryLatestTask := &QueryLatest{BlockChain: mBlockChain, Peer: mPeer}
 	_ = queryLatestTask.Execute()
 	mPeer.AssertExpectations(t)
 }
 
 func TestQueryAll_Execute(t *testing.T) {
-	testBlocks := []*block.Block{{Data: "test"}}
+	testBlocks := blockchain.DoublyLinkedBlockListCreateFromSlice([]*block.Block{{Data: "test"}})
+	testBlocksSlice := testBlocks.ToSlice()
 
 	mPeer := &MockPeer{}
-	mPeer.On("SendResponseBlockChainMsg", testBlocks).Return(nil)
+	mPeer.On("SendResponseBlockChainMsg", testBlocksSlice).Return(nil)
 
-	queryLatestTask := &QueryAll{
-		Blocks:      testBlocks,
-		PeerMsgTask: &PeerMsgTask{Peer: mPeer},
-	}
+	mBlockChain := &MockBlockChain{}
+	mBlockChain.On("GetBlocks").Return(testBlocks)
+
+	queryLatestTask := &QueryAll{BlockChain: mBlockChain, Peer: mPeer}
 	_ = queryLatestTask.Execute()
 
 	mPeer.AssertExpectations(t)
@@ -186,19 +192,16 @@ func TestQueryAll_Execute(t *testing.T) {
 
 func TestResponseBlockChain_Execute(t *testing.T) {
 
-	responseBlockChain := &ResponseBlockChain{
-		PeerMsgTask: &PeerMsgTask{
-			Msg: &tcp.PeerMsg{},
-		},
-	}
+	responseBlockChain := &ResponseBlockChain{}
 
 	// Test zero chain size
 	t.Run("Zero chain size", func(t *testing.T) {
 		mPeer := &MockPeer{}
 		mBlockChain := &MockBlockChain{}
-		responseBlockChain.PeerMsgTask.Peer = mPeer
+		responseBlockChain.Peer = mPeer
 		responseBlockChain.BlockChain = mBlockChain
-		responseBlockChain.PeerMsgTask.Msg.Data = []*block.Block{}
+		msgData, _ := json.Marshal(make([]*block.Block, 0))
+		responseBlockChain.Msg = &tcp.PeerMsg{Data: msgData}
 
 		mPeer.On("SendAckMsg").Return(nil)
 		_ = responseBlockChain.Execute()
@@ -213,8 +216,9 @@ func TestResponseBlockChain_Execute(t *testing.T) {
 		mPeer.On("SendAckMsg").Return(nil)
 		mBlockChain := &MockBlockChain{}
 		mBlockChain.On("GetLatestBlock").Return(latestBlock)
-		responseBlockChain.PeerMsgTask.Msg.Data = receivedBlocks
-		responseBlockChain.PeerMsgTask.Peer = mPeer
+		msgData, _ := json.Marshal(receivedBlocks)
+		responseBlockChain.Msg = &tcp.PeerMsg{Data: msgData}
+		responseBlockChain.Peer = mPeer
 		responseBlockChain.BlockChain = mBlockChain
 
 		_ = responseBlockChain.Execute()
@@ -232,9 +236,10 @@ func TestResponseBlockChain_Execute(t *testing.T) {
 		mBlockChain := &MockBlockChain{}
 		mBlockChain.On("GetLatestBlock").Return(latestBlock)
 		mBlockChain.On("AddBlock", receivedBlocks[0]).Return(nil)
-		responseBlockChain.PeerMsgTask.Peer = mPeer
+		responseBlockChain.Peer = mPeer
 		responseBlockChain.BlockChain = mBlockChain
-		responseBlockChain.PeerMsgTask.Msg.Data = receivedBlocks
+		msgData, _ := json.Marshal(receivedBlocks)
+		responseBlockChain.Msg = &tcp.PeerMsg{Data: msgData}
 
 		_ = responseBlockChain.Execute()
 
@@ -250,9 +255,10 @@ func TestResponseBlockChain_Execute(t *testing.T) {
 		mPeer.On("SendQueryAllMsg").Return(nil)
 		mBlockChain := &MockBlockChain{}
 		mBlockChain.On("GetLatestBlock").Return(latestBlock)
-		responseBlockChain.PeerMsgTask.Peer = mPeer
+		responseBlockChain.Peer = mPeer
 		responseBlockChain.BlockChain = mBlockChain
-		responseBlockChain.PeerMsgTask.Msg.Data = receivedBlocks
+		msgData, _ := json.Marshal(receivedBlocks)
+		responseBlockChain.Msg = &tcp.PeerMsg{Data: msgData}
 
 		_ = responseBlockChain.Execute()
 
@@ -270,9 +276,10 @@ func TestResponseBlockChain_Execute(t *testing.T) {
 		mBlockChain := &MockBlockChain{}
 		mBlockChain.On("GetLatestBlock").Return(latestBlock)
 		mBlockChain.On("ReplaceChain", mock.AnythingOfType("*blockchain.BlockChainIml")).Return(nil)
-		responseBlockChain.PeerMsgTask.Peer = mPeer
+		responseBlockChain.Peer = mPeer
 		responseBlockChain.BlockChain = mBlockChain
-		responseBlockChain.PeerMsgTask.Msg.Data = receivedBlocks
+		msgData, _ := json.Marshal(receivedBlocks)
+		responseBlockChain.Msg = &tcp.PeerMsg{Data: msgData}
 
 		_ = responseBlockChain.Execute()
 

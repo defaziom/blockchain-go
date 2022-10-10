@@ -38,9 +38,10 @@ func TestReadData(t *testing.T) {
 }
 
 func TestPeerConn_ReceiveMsg(t *testing.T) {
+	data, _ := json.Marshal([]*block.Block{})
 	testMsg := &PeerMsg{
 		Type: QUERY_LATEST,
-		Data: []*block.Block{},
+		Data: data,
 	}
 	testData, _ := json.Marshal(testMsg)
 	mockConn := &MockConn{DataToBeRead: bytes.NewBuffer(append(testData, byte('\n')))}
