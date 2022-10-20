@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/defaziom/blockchain-go/block"
@@ -71,20 +72,17 @@ type PeerMsgTask struct {
 }
 
 func (pje *PeerJobExecutor) Start() error {
+	defer pje.Peer.ClosePeer()
+
 	var task Task
 	task, err := pje.Job.GetNextTask()
 	if err != nil {
 		return errors.New("Failed to get next task: " + err.Error())
 	}
 	for task != nil {
-		err := task.Execute()
+		err = task.Execute()
 		if err != nil {
 			log.Println("Task Failed: ", err.Error())
-			log.Println("Closing peer")
-			err = pje.Peer.ClosePeer()
-			if err != nil {
-				log.Println("Failed to close peer: ", err.Error())
-			}
 			return errors.New("job failed due to failed task: " + err.Error())
 		}
 		task, err = pje.Job.GetNextTask()
@@ -134,8 +132,11 @@ func (pj *PeerJob) GetNextTask() (Task, error) {
 	case tcp.RESPONSE_BLOCKCHAIN:
 		rbc := ResponseBlockChain(pMsgT)
 		t = &rbc
+	case tcp.QUERY_TRANSACTION_POOL:
+		qtp := QueryTransactionPool(pMsgT)
+		t = &qtp
 	case tcp.RESPONSE_TRANSACTION_POOL:
-		rtp := ResponseTransactionPool(PeerMsgTask{})
+		rtp := ResponseTransactionPool(pMsgT)
 		t = &rtp
 	default:
 		return nil, errors.New("received unknown msg type")
@@ -209,6 +210,24 @@ func (task *ResponseBlockChain) Execute() error {
 				if err != nil {
 					log.Println("Received invalid block: " + err.Error())
 				}
+				var txs []*transaction.TransactionIml
+				err = json.Unmarshal([]byte(latestBlockReceived.Data), &txs)
+
+				// process tx
+				txsToProcess := make([]*transaction.TransactionIml, 0)
+				for _, tx := range txs {
+					if !task.TxService.Pool().Contains(tx.Id) {
+						txsToProcess = append(txsToProcess, tx)
+					}
+				}
+				err = task.TxService.ProcessTransactions(txsToProcess, latestBlockReceived.Index)
+				if err != nil {
+					return err
+				}
+
+				// Update transactions in pool
+				task.TxService.Pool().Update(task.TxService.GetUnspentTxOutList())
+
 			} else if len(receivedBlocks) == 1 {
 				// We have to query the chain from our peer
 				log.Println("Querying peer for entire blockchain")
@@ -223,7 +242,8 @@ func (task *ResponseBlockChain) Execute() error {
 				log.Println("Replacing blockchain")
 				receivedChainList := blockchain.DoublyLinkedBlockListCreateFromSlice(receivedBlocks)
 				receivedBlockChain := &blockchain.BlockChainIml{Blocks: receivedChainList}
-				task.BlockChain.ReplaceChain(receivedBlockChain)
+				task.BlockChain.ReplaceChain(receivedBlockChain, task.TxService)
+				task.TxService.Pool().Update(task.TxService.GetUnspentTxOutList())
 			}
 		} else {
 			log.Println("Received chain is not longer than our own chain. Do nothing.")
@@ -260,15 +280,26 @@ func (task *ResponseTransactionPool) Execute() error {
 	}
 	v := transaction.TxValidator{}
 
+	addedTx := make([]*transaction.TransactionIml, 0)
+	txPool := task.TxService.Pool()
 	for _, tx := range txs {
-		if valid, reason := task.TxService.ValidateTransaction(tx); valid {
-			log.Printf("Invalid transaction received: " + reason)
-		} else if !v.ValidateTxForPool(tx, task.TxService.Pool()) {
-			log.Println("Invalid transaction received")
+		if txPool.Contains(tx.Id) {
+			// Tx is already in the pool
+			continue
 		}
-
+		if valid, reason := task.TxService.ValidateTransaction(tx); !valid {
+			log.Println("Invalid transaction received: ", reason)
+			continue
+		}
+		if !v.ValidateTxForPool(tx, task.TxService.Pool()) {
+			log.Println("Invalid transaction received: A TxIn references an UnspentTxOut in the transaction pool")
+			continue
+		}
 		task.TxService.Pool().Add(tx)
+		addedTx = append(addedTx, tx)
 	}
+
+	task.TxService.UpdateUnspentTxOuts(addedTx)
 
 	return nil
 }

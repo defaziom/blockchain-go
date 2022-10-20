@@ -223,14 +223,14 @@ func TestTxValidator_ContainsDuplicates(t *testing.T) {
 		tx1.TxIns = []*TxIn{{UnspentTxOut: uTxOut1}, {UnspentTxOut: uTxOut2}}
 		tx2.TxIns = []*TxIn{{UnspentTxOut: uTxOut3}}
 
-		assert.False(t, v.ContainsDuplicates([]Transaction{tx1, tx2}))
+		assert.False(t, v.ContainsDuplicates([]*TransactionIml{tx1, tx2}))
 	})
 
 	t.Run("HasDuplicates", func(t *testing.T) {
 		tx1.TxIns = []*TxIn{{UnspentTxOut: uTxOut1}, {UnspentTxOut: uTxOut2}}
 		tx2.TxIns = []*TxIn{{UnspentTxOut: uTxOut3}, {UnspentTxOut: uTxOut1}}
 
-		assert.True(t, v.ContainsDuplicates([]Transaction{tx1, tx2}))
+		assert.True(t, v.ContainsDuplicates([]*TransactionIml{tx1, tx2}))
 	})
 }
 
@@ -301,12 +301,7 @@ func TestUnspentTxOutSlice_Update(t *testing.T) {
 		},
 	}}
 
-	var transactions []Transaction
-	for _, v := range txs {
-		transactions = append(transactions, v)
-	}
-
-	unspentTxOuts.Update(transactions)
+	unspentTxOuts.Update(txs)
 	assert.Len(t, unspentTxOuts, 2)
 	assert.Contains(t, unspentTxOuts, &UnspentTxOut{
 		TxOutId:    "moustache",
@@ -337,7 +332,7 @@ func TestServiceIml_ValidateBlockTransactions(t *testing.T) {
 	mV.On("ValidateSignedTx", mock.Anything, mock.Anything).Return(true, "")
 	mV.On("ValidateTxAmount", mock.Anything).Return(true)
 
-	txs := make([]Transaction, 2)
+	txs := make([]*TransactionIml, 2)
 	txs[0] = &TransactionIml{}
 	txs[1] = &TransactionIml{TxIns: []*TxIn{{}}}
 

@@ -21,19 +21,28 @@ type Info struct {
 	Balance int
 }
 
-func (w *Service) SendToAddress(amount int, address string) (*transaction.TransactionIml, error) {
+type SendRequest struct {
+	Address string
+	Amount  int
+}
+
+func (w *Service) SendToAddress(amount int, address string) error {
 	unspentTxOuts, leftover, err := w.TxService.GetUnspentTxOutsForAmount(amount, w.Address)
 	if err != nil {
-		return nil, fmt.Errorf("error sending to address: %w", err)
+		return fmt.Errorf("error sending to address: %w", err)
 	}
 	txIns := w.TxService.UnspentTxOutToTxIn(unspentTxOuts)
 	txOuts := w.TxService.CreateTxOuts(w.Address, address, amount, leftover)
 	tx, err := w.TxService.CreateTransaction(txIns, txOuts, w.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("error sending to address: %w", err)
+		return fmt.Errorf("error sending to address: %w", err)
 	}
 
-	return tx, nil
+	// add the new transaction to the pool
+	w.TxService.Pool().Add(tx)
+	w.TxService.UpdateUnspentTxOuts([]*transaction.TransactionIml{tx})
+
+	return nil
 }
 
 func (w *Service) GetInfo() *Info {

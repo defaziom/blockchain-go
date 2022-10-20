@@ -1,8 +1,10 @@
 package blockchain
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/defaziom/blockchain-go/block"
+	"github.com/defaziom/blockchain-go/transaction"
 	"log"
 	"math"
 	"strings"
@@ -110,7 +112,7 @@ type BlockChain interface {
 	GetAdjustedDifficulty() int
 	GetCumulativeDifficulty() float64
 	GetLatestBlock() *block.Block
-	ReplaceChain(newChain BlockChain)
+	ReplaceChain(newChain BlockChain, ts transaction.Service)
 }
 
 type BlockChainIml struct {
@@ -210,8 +212,8 @@ func (bc *BlockChainIml) GetBlocks() *SafeDoublyLinkedBlockList {
 	return bc.Blocks
 }
 
-func (bc *BlockChainIml) ReplaceChain(newChain BlockChain) {
-	if IsValidBlockChain(newChain) && newChain.GetCumulativeDifficulty() > bc.GetCumulativeDifficulty() {
+func (bc *BlockChainIml) ReplaceChain(newChain BlockChain, ts transaction.Service) {
+	if IsValidBlockChain(newChain, ts) && newChain.GetCumulativeDifficulty() > bc.GetCumulativeDifficulty() {
 		log.Println("Received blockchain is valid. Replacing current blockchain with received blockchain")
 		bc.Blocks = newChain.GetBlocks()
 	} else {
@@ -236,7 +238,7 @@ func IsValidGenesisBlock(block *block.Block) bool {
 	return block.BlockHash == GetGenesisBlock().BlockHash
 }
 
-func IsValidBlockChain(bc BlockChain) bool {
+func IsValidBlockChain(bc BlockChain, ts transaction.Service) bool {
 	list := bc.GetBlocks()
 	for list.Prev != nil {
 		currentBlock := list.Value
@@ -246,6 +248,16 @@ func IsValidBlockChain(bc BlockChain) bool {
 			return false
 		}
 		list = list.Prev
+
+		var txs []*transaction.TransactionIml
+		err := json.Unmarshal([]byte(currentBlock.Data), &txs)
+
+		// process tx
+		err = ts.ProcessTransactions(txs, currentBlock.Index)
+		if err != nil {
+			log.Println("Invalid block transactions: ", err.Error())
+			return false
+		}
 	}
 	// Last block should be genesis block
 	return IsValidGenesisBlock(list.Value)

@@ -39,7 +39,7 @@ type UnspentTxOut struct {
 }
 
 type UnspentTxOutList interface {
-	Update(newTransactions []Transaction)
+	Update(newTransactions []*TransactionIml)
 	Find(id string, index int) *UnspentTxOut
 }
 
@@ -59,7 +59,7 @@ type Validator interface {
 	ValidateTxAmount(t Transaction) bool
 	ValidateTxId(t Transaction) bool
 	ValidateSignedTx(signedTx SignedTx, data string) (valid bool, reason string)
-	ContainsDuplicates(txs []Transaction) bool
+	ContainsDuplicates(txs []*TransactionIml) bool
 	ValidateTxForPool(t Transaction, p Pool) bool
 }
 
@@ -86,11 +86,13 @@ type HexPrivateKey struct {
 }
 
 type Service interface {
-	ProcessTransactions(transactions []Transaction, unspentTxOuts UnspentTxOutList, blockIndex int) error
-	ValidateBlockTransactions(v Validator, transactions []Transaction, blockIndex int) (valid bool, reason string)
+	ProcessTransactions(transactions []*TransactionIml, blockIndex int) error
+	UpdateUnspentTxOuts(transactions []*TransactionIml)
+	ValidateBlockTransactions(transactions []*TransactionIml, blockIndex int) (valid bool, reason string)
 	ValidateTransaction(t Transaction) (valid bool, reason string)
 	GetTotalUnspentTxOutAmount(addr string) int
 	GetUnspentTxOutsForAmount(amount int, address string) ([]*UnspentTxOut, int, error)
+	GetUnspentTxOutList() *UnspentTxOutSlice
 	UnspentTxOutToTxIn(unspentTxOuts []*UnspentTxOut) []*TxIn
 	CreateTxOuts(sender string, recipient string, amount int, leftover int) []*TxOut
 	CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKey string) (*TransactionIml, error)
@@ -100,7 +102,7 @@ type Service interface {
 type ServiceIml struct {
 	UnspentTxOuts *UnspentTxOutSlice
 	Validator
-	Pool
+	PoolSlice *PoolSlice
 }
 
 type Pool interface {
@@ -108,6 +110,7 @@ type Pool interface {
 	Update(list UnspentTxOutList)
 	Add(tx Transaction)
 	GetTxIns() map[string]*TxIn
+	Contains(id string) bool
 }
 
 type PoolSlice []*TransactionIml
@@ -179,7 +182,10 @@ func (v *TxValidator) ValidateCoinbaseTx(t Transaction, blockIndex int) (valid b
 		return false, "only one TxIn must be specified in the coinbase transaction"
 	}
 	if txIns[0].UnspentTxOut.TxOutIndex != blockIndex {
-		return false, "the TxOutIndex referred by the TxIn must match the block height"
+		return false, fmt.Sprintf("the TxOutIndex referred by the TxIn must match the block height"+
+			": TxIn=%d"+
+			" blockIndex=%d"+
+			" TxId=%s", txIns[0].UnspentTxOut.TxOutIndex, blockIndex, t.GetId())
 	}
 	txOuts := t.GetTxOuts()
 	if len(txOuts) != 1 {
@@ -195,7 +201,7 @@ func (v *TxValidator) ValidateSignedTx(signedTx SignedTx, data string) (valid bo
 	return signedTx.Validate(data)
 }
 
-func (v *TxValidator) ContainsDuplicates(txs []Transaction) bool {
+func (v *TxValidator) ContainsDuplicates(txs []*TransactionIml) bool {
 	// Check for duplicates
 	txInMap := make(map[string]*TxIn)
 	txInTotal := 0
@@ -269,7 +275,7 @@ func (txIn *TxIn) Validate(data string) (valid bool, reason string) {
 	return valid, reason
 }
 
-func (u *UnspentTxOutSlice) Update(txs []Transaction) {
+func (u *UnspentTxOutSlice) Update(txs []*TransactionIml) {
 	// Collect new unspent transactions created by new transactions
 	var newUnspentTxOuts []*UnspentTxOut
 	for _, t := range txs {
@@ -347,34 +353,37 @@ func (k *HexPrivateKey) UnMarshal(key string) error {
 	return nil
 }
 
-func (s *ServiceIml) ValidateBlockTransactions(transactions []Transaction, blockIndex int) (valid bool, reason string) {
+func (s *ServiceIml) ValidateBlockTransactions(transactions []*TransactionIml, blockIndex int) (valid bool,
+	reason string) {
 	coinbaseTx := transactions[0]
 	if valid, reason = s.Validator.ValidateCoinbaseTx(coinbaseTx, blockIndex); !valid {
-		return
+		return false, fmt.Sprintf("CoinbaseTx validation failed: %s", reason)
 	}
 
 	if s.Validator.ContainsDuplicates(transactions) {
 		return false, "Transaction list contains duplicate TxIns"
 	}
 
-	for _, t := range transactions[1:] {
+	if len(transactions) > 1 {
+		for _, t := range transactions[1:] {
 
-		// Validate ID
-		if !s.Validator.ValidateTxId(t) {
-			return false, "invalid tx ID: " + t.GetId()
-		}
-
-		// Validate all TxIns
-		for _, txIn := range t.GetTxIns() {
-			valid, reason = s.Validator.ValidateSignedTx(txIn, t.GetId())
-			if !valid {
-				return
+			// Validate ID
+			if !s.Validator.ValidateTxId(t) {
+				return false, "invalid tx ID: " + t.GetId()
 			}
-		}
 
-		// Validate tx amounts
-		if !s.Validator.ValidateTxAmount(t) {
-			return false, "total TxOut Amount does not equal total TxIn Amount for TxId: " + t.GetId()
+			// Validate all TxIns
+			for _, txIn := range t.GetTxIns() {
+				valid, reason = s.Validator.ValidateSignedTx(txIn, t.GetId())
+				if !valid {
+					return
+				}
+			}
+
+			// Validate tx amounts
+			if !s.Validator.ValidateTxAmount(t) {
+				return false, "total TxOut Amount does not equal total TxIn Amount for TxId: " + t.GetId()
+			}
 		}
 	}
 
@@ -412,15 +421,19 @@ func CreateCoinbaseTransaction(addr string, blockIndex int) *TransactionIml {
 	return t
 }
 
-func (s *ServiceIml) ProcessTransactions(transactions []Transaction, blockIndex int) error {
+func (s *ServiceIml) ProcessTransactions(transactions []*TransactionIml, blockIndex int) error {
 	if valid, reason := s.ValidateBlockTransactions(transactions, blockIndex); !valid {
 		return errors.New(fmt.Sprintf("invalid block transactions: %s\n", reason))
 	}
 
 	s.UnspentTxOuts.Update(transactions)
+
 	return nil
 }
 
+func (s *ServiceIml) UpdateUnspentTxOuts(transactions []*TransactionIml) {
+	s.UnspentTxOuts.Update(transactions)
+}
 func (s *ServiceIml) GetTotalUnspentTxOutAmount(addr string) int {
 	total := 0
 	for _, unspentTxOut := range *s.UnspentTxOuts {
@@ -484,6 +497,14 @@ func (s *ServiceIml) CreateTransaction(txIns []*TxIn, txOuts []*TxOut, privateKe
 	return tx, nil
 }
 
+func (s *ServiceIml) GetUnspentTxOutList() *UnspentTxOutSlice {
+	return s.UnspentTxOuts
+}
+
+func (s *ServiceIml) Pool() *PoolSlice {
+	return s.PoolSlice
+}
+
 func (p *PoolSlice) Replace(pool []Transaction) {
 	*p = make([]*TransactionIml, len(pool))
 	for i, tx := range pool {
@@ -491,7 +512,7 @@ func (p *PoolSlice) Replace(pool []Transaction) {
 	}
 }
 func (p *PoolSlice) Update(unspentTxOuts UnspentTxOutList) {
-	var newPool []*TransactionIml
+	newPool := make([]*TransactionIml, 0)
 	for _, tx := range *p {
 		for _, txIn := range tx.TxIns {
 			if unspentTxOuts.Find(txIn.UnspentTxOut.TxOutId, txIn.UnspentTxOut.TxOutIndex) != nil {
@@ -517,6 +538,15 @@ func (p *PoolSlice) GetTxIns() map[string]*TxIn {
 	}
 
 	return txInMap
+}
+
+func (p *PoolSlice) Contains(id string) bool {
+	for _, tx := range *p {
+		if tx.Id == id {
+			return true
+		}
+	}
+	return false
 }
 
 func GeneratePrivateKey() (string, error) {

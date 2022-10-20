@@ -32,7 +32,7 @@ type Peer interface {
 	IsClosed() bool
 	ReceiveMsg() (*PeerMsg, error)
 	SendResponseBlockChainMsg(blocks []*block.Block) error
-	SendResponseTransactionPoolMsg(txs *transaction.PoolSlice) error
+	SendResponseTransactionPoolMsg(p transaction.Pool) error
 	SendQueryAllMsg() error
 	SendQueryTransactionPoolMsg() error
 	SendAckMsg() error
@@ -172,13 +172,13 @@ func (pc *PeerConn) SendQueryTransactionPoolMsg() error {
 	})
 }
 
-func (pc *PeerConn) SendResponseTransactionPoolMsg(tx *transaction.PoolSlice) error {
-	data, err := json.Marshal(tx)
+func (pc *PeerConn) SendResponseTransactionPoolMsg(p transaction.Pool) error {
+	data, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
 	return pc.SendResp(&PeerMsg{
-		Type: QUERY_TRANSACTION_POOL,
+		Type: RESPONSE_TRANSACTION_POOL,
 		Data: data,
 	})
 }

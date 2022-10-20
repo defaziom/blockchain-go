@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/defaziom/blockchain-go/block"
 	"github.com/defaziom/blockchain-go/database"
+	"github.com/defaziom/blockchain-go/transaction"
 	"log"
 	"net"
 )
@@ -49,6 +50,19 @@ func BroadCastBlockToPeers(b *block.Block, peers []Peer, pc chan Peer) {
 		err := peer.SendResponseBlockChainMsg([]*block.Block{b})
 		if err != nil {
 			log.Printf("Failed to send block to peer: %s\n", err)
+		} else {
+			// Place the peer in the channel to continue processing
+			pc <- peer
+		}
+	}
+}
+
+func BroadCastTransactionPoolToPeers(p transaction.Pool, peers []Peer, pc chan Peer) {
+	log.Println("Sending transaction pool to peers")
+	for _, peer := range peers {
+		err := peer.SendResponseTransactionPoolMsg(p)
+		if err != nil {
+			log.Printf("Failed to send transaction pool to peer: %s\n", err)
 		} else {
 			// Place the peer in the channel to continue processing
 			pc <- peer
